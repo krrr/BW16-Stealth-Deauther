@@ -87,7 +87,14 @@ int HttpClient::read()
 
 int HttpClient::read(uint8_t *buf, size_t size)
 {
-    uint16_t _size = size;
+    if (size > 65535) {
+        return -1;  // 缓冲区大小超过底层 uint16_t 最大支持长度，直接报错
+    }
+    if (size == 0) {
+        return 0;
+    }
+
+    uint16_t _size = (uint16_t)size;
     int ret;
     int err;
 
@@ -156,9 +163,7 @@ int HttpClient::peek()
 
 void HttpClient::flush()
 {
-    while (available()) {
-        read();
-    }
+    // HttpClient 没有用户态发送缓冲区，write() 会同步通过 lwip_send 发送
 }
 
 static char hexNibble(char c) {
@@ -340,7 +345,6 @@ void HttpClient::sendSseHeader() {
     println("Connection: keep-alive");
     println("Access-Control-Allow-Origin: *");
     println();
-    flush();
 }
 
 void HttpClient::sendSseData(const String& data) {
@@ -361,7 +365,6 @@ void HttpClient::sendSseEvent(const char* event, const String& data) {
     print("\ndata: ");
     print(data);
     print("\n\n");
-    flush();
 }
 
 void HttpClient::sendSseEvent(const char* event, JsonDocument& doc) {
