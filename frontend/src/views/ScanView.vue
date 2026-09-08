@@ -69,6 +69,11 @@
                         Clear Results
                       </a>
                     </li>
+                    <li>
+                      <a @click.prevent="openRssiModal(ap)">
+                        Signal Graph
+                      </a>
+                    </li>
                   </Dropdown>
                 </td>
               </tr>
@@ -179,12 +184,21 @@
         <small v-else>Scan takes approx. 10 seconds</small>
       </footer>
     </article>
+
+    <!-- RSSI Trend Chart Modal -->
+    <RssiChartModal
+      :open="rssiModalOpen"
+      :target="selectedTargetForChart"
+      :history="selectedTargetForChart ? (rssiHistoryMap[selectedTargetForChart.bssid] || []) : []"
+      @close="rssiModalOpen = false"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import Dropdown from '../components/Dropdown.vue'
+import RssiChartModal, { type RssiPoint, type RssiTarget } from '../components/RssiChartModal.vue'
 import { message } from '../utils/message'
 import { addTarget, loadPlan, type AttackTarget } from '../utils/attackPlan'
 
@@ -256,6 +270,59 @@ const deviceEventSource = ref<EventSource | null>(null)
 
 const deauthing = ref<Record<string, boolean>>({})
 
+// RSSI Trend Modal state and history tracking
+const MAX_RSSI_HISTORY = 10 // 最大采样点数量（滑动窗口FIFO，自动淘汰最老数据）
+const rssiModalOpen = ref(false)
+const selectedTargetForChart = ref<RssiTarget | null>(null)
+const rssiHistoryMap = ref<Record<string, RssiPoint[]>>({})
+
+const recordRssiHistory = (bssid: string, rssi: number, timeStr?: string) => {
+  if (rssi === undefined || rssi === 0) return
+  if (!rssiHistoryMap.value[bssid]) {
+    rssiHistoryMap.value[bssid] = []
+  }
+  const history = rssiHistoryMap.value[bssid]
+  const now = Date.now()
+  const formattedTime = timeStr || new Date().toLocaleTimeString('sv-SE')
+
+  // Avoid spamming identical values in the exact same second
+  const last = history[history.length - 1]
+  if (last && last.rssi === rssi && now - last.timestamp < 1000) {
+    return
+  }
+
+  history.push({
+    time: formattedTime,
+    timestamp: now,
+    rssi,
+  })
+
+  // 保持适合的最大采样点数量，自动删除最老的数据
+  while (history.length > MAX_RSSI_HISTORY) {
+    history.shift()
+  }
+
+  // If the chart modal is currently open for this target, update its live reference
+  if (selectedTargetForChart.value && selectedTargetForChart.value.bssid === bssid) {
+    selectedTargetForChart.value.rssi = rssi
+  }
+}
+
+const openRssiModal = (ap: NetworkInfo) => {
+  selectedTargetForChart.value = {
+    bssid: ap.bssid,
+    ssid: ap.ssid,
+    rssi: ap.rssi,
+    channel: ap.channel,
+    band: ap.band,
+    lastSeen: ap.lastSeen,
+  }
+  if (!rssiHistoryMap.value[ap.bssid] || rssiHistoryMap.value[ap.bssid].length === 0) {
+    recordRssiHistory(ap.bssid, ap.rssi, ap.lastSeen)
+  }
+  rssiModalOpen.value = true
+}
+
 // 攻击计划草稿目标（sessionStorage）：设备 -> "已加入" 标记
 const targetedKeys = ref<Record<string, boolean>>({})
 const targetedKey = (bssid: string, mac: string) => mac + '|' + bssid
@@ -291,7 +358,14 @@ const loadPersisted = () => {
   if (!saved) return
   try {
     const data = JSON.parse(saved)
-    if (data.scanResults) scanResults.value = data.scanResults
+    if (data.scanResults) {
+      scanResults.value = data.scanResults
+      for (const ap of scanResults.value) {
+        if (ap.rssi && (!rssiHistoryMap.value[ap.bssid] || rssiHistoryMap.value[ap.bssid].length === 0)) {
+          recordRssiHistory(ap.bssid, ap.rssi, ap.lastSeen)
+        }
+      }
+    }
     if (data.deviceResults) deviceResults.value = data.deviceResults
     if (scanResults.value.length > 0) scanResultCount.value = scanResults.value.length
   } catch { /* ignore corrupt data */ }
@@ -314,6 +388,9 @@ const clearAllPersisted = () => {
   deviceErrors.value = {}
   scanResultCount.value = null
   expandedBssids.value = {}
+  rssiHistoryMap.value = {}
+  rssiModalOpen.value = false
+  selectedTargetForChart.value = null
   localStorage.removeItem(STORAGE_KEY)
   message.success('Data cleared in the browser')
 }
@@ -336,6 +413,7 @@ const startScan = async () => {
           ap.band = (ap.channel >= 36) ? '5G' : '2.4G'
           scanResults.value.push(ap)
         }
+        recordRssiHistory(ap.bssid, ap.rssi, now)
       }
       scanResults.value.sort((a, b) => b.rssi - a.rssi)
       scanResultCount.value = scanResults.value.length
@@ -514,6 +592,7 @@ const startDeviceScan = async (bssid: string, channel: number, duration?: number
             if (data.ap_rssi !== undefined && data.ap_rssi !== 0) {
               ap.rssi = data.ap_rssi
               ap.lastSeen = now
+              recordRssiHistory(bssid, data.ap_rssi, now)
             }
             if (data.ap_beacon_parsed) {
               ap.advanced_info = {
