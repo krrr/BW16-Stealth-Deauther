@@ -55,6 +55,28 @@ def make_ota_bin(input_path, output_path):
         f.write(payload)
 
     print(f"Success! Generated: {output_path} ({len(header) + payload_len} bytes)")
+    return True
+
+# ---------------------------------------------------------------------------
+# PlatformIO SCons post-action hook
+# ---------------------------------------------------------------------------
+try:
+    Import("env")
+
+    def _postaction_make_ota(target, source, env):
+        build_dir = env.subst("$BUILD_DIR")
+        input_file = os.path.join(build_dir, "km0_km4_image2.bin")
+        output_file = os.path.join(build_dir, "ota_all.bin")
+        make_ota_bin(input_file, output_file)
+
+    progname = env.subst("$PROGNAME")
+    progsuffix = env.subst("$PROGSUFFIX")
+    target_axf = os.path.join(env.subst("$BUILD_DIR"), f"{progname}{progsuffix}")
+    env.AddPostAction(target_axf, _postaction_make_ota)
+
+except NameError:
+    # Not running inside PlatformIO / SCons
+    pass
 
 if __name__ == "__main__":
     # Default paths matching PlatformIO structure
@@ -64,4 +86,6 @@ if __name__ == "__main__":
     input_file = sys.argv[1] if len(sys.argv) > 1 else default_input
     output_file = sys.argv[2] if len(sys.argv) > 2 else default_output
 
-    make_ota_bin(input_file, output_file)
+    if not make_ota_bin(input_file, output_file):
+        sys.exit(1)
+

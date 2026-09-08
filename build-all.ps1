@@ -19,18 +19,14 @@ if ($LASTEXITCODE -ne 0) { exit 1 }
 
 Write-Host "`n=== 3. Build firmware ===" -ForegroundColor Cyan
 if ($Upload) {
-    pio run --target upload --target postbuild_image
+    pio run --target upload
 } else {
     pio run
 }
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
-Write-Host "`n=== 4. Generate OTA image (ota_all.bin) ===" -ForegroundColor Cyan
-python (Join-Path (Join-Path $root "scripts") "make_ota_bin.py")
-if ($LASTEXITCODE -ne 0) { exit 1 }
-
 if ($Ota) {
-    Write-Host "`n=== 5. Upload OTA firmware ===" -ForegroundColor Cyan
+    Write-Host "`n=== 4. Upload OTA firmware ===" -ForegroundColor Cyan
     $otaPath = Join-Path $root ".pio\build\bw16\ota_all.bin"
     if (-not (Test-Path $otaPath)) {
         Write-Host "[ERROR] OTA file not found: $otaPath" -ForegroundColor Red
