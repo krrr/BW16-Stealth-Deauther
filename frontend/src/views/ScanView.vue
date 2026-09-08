@@ -40,7 +40,7 @@
                   </span>
                   <span v-if="isVirtualMac(ap.bssid)" class="badge badge-red" style="font-size: 0.7em;">Virtual</span>
                 </td>
-                <td :style="{ color: rssiColor(ap.rssi), fontWeight: 'bold' }">{{ ap.rssi }} <span class="dbm-unit">dBm</span></td>
+                <td :style="{ color: rssiColor(ap.rssi), fontWeight: 'bold', cursor: 'pointer' }" title="View signal graph" @click="openRssiModal(ap)">{{ ap.rssi }} <span class="dbm-unit">dBm</span></td>
                 <td>{{ ap.channel }}</td>
                 <td>{{ ap.band }}</td>
                 <td class="smaller-td">{{ ap.security }}</td>
@@ -55,7 +55,7 @@
                   >
                     <span>{{ deviceScanning === ap.bssid ? 'Stop Listening' : 'Scan Devices' }}</span>
                   </button>
-                  <Dropdown summary-class="outline secondary btn-sm" align="right">
+                  <Dropdown summary-class="outline contrast btn-sm" align="right">
                     <li>
                       <a
                         :class="{ 'disabled-link': deviceScanning !== null }"
@@ -124,20 +124,23 @@
                               </span>
                               <span v-if="isVirtualMac(dev.mac)" class="badge badge-red">Virtual</span>
                             </td>
-                            <td>
+                            <td
+                              style="cursor: pointer"
+                              title="View signal graph"
+                              @click="openDeviceRssiModal(ap, dev)"
+                            >
                               <span v-if="dev.rssi" :style="{ color: rssiColor(dev.rssi), fontWeight: 'bold' }">{{ dev.rssi }} <span class="dbm-unit">dBm</span></span>
                               <span v-else style="color:var(--muted-color)">—</span>
                             </td>
                             <td>{{ '↑' + (dev.packets_out || 0) + ' / ↓' + (dev.packets_in || 0) }}</td>
                             <td>{{ dev.handshakes || 0 }}</td>
                             <td>{{ dev.lastSeen }}</td>
-                            <td>
+                            <td class="inner-btn-col">
                               <button
                                 v-if="!isTargeted(ap.bssid, dev.mac)"
                                 @click="addToAttack(ap, dev)"
                                 title="Add to attack schedule"
                                 class="outline btn-sm"
-                                style="margin-right:0.25rem;"
                               >
                                 Add
                               </button>
@@ -146,7 +149,7 @@
                                 disabled
                                 title="Already in attack schedule, can be removed in attack page"
                                 class="outline btn-sm"
-                                style="margin-right:0.25rem;color:var(--muted-color);border-color:var(--muted-color);"
+                                style="color:var(--muted-color);border-color:var(--muted-color);"
                               >
                                 ✓ Added
                               </button>
@@ -160,6 +163,13 @@
                               >
                                 <span>{{ deauthing[ap.bssid + '-' + dev.mac] ? 'Stop Listening' : 'Deauth' }}</span>
                               </button>
+                              <Dropdown summary-class="outline secondary btn-sm" align="right" label="Other">
+                                <li>
+                                  <a @click.prevent="openDeviceRssiModal(ap, dev)">
+                                    Signal Graph
+                                  </a>
+                                </li>
+                              </Dropdown>
                             </td>
                           </tr>
                         </tbody>
@@ -189,14 +199,17 @@
     <RssiChartModal
       :open="rssiModalOpen"
       :target="selectedTargetForChart"
-      :history="selectedTargetForChart ? (rssiHistoryMap[selectedTargetForChart.bssid] || []) : []"
+      :history="currentChartHistory"
+      :is-scanning="isTargetScanning"
+      :is-scanning-other="isScanningOtherTarget"
       @close="rssiModalOpen = false"
+      @toggle-scan="handleModalToggleScan"
     />
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import Dropdown from '../components/Dropdown.vue'
 import RssiChartModal, { type RssiPoint, type RssiTarget } from '../components/RssiChartModal.vue'
 import { message } from '../utils/message'
@@ -276,12 +289,20 @@ const rssiModalOpen = ref(false)
 const selectedTargetForChart = ref<RssiTarget | null>(null)
 const rssiHistoryMap = ref<Record<string, RssiPoint[]>>({})
 
-const recordRssiHistory = (bssid: string, rssi: number, timeStr?: string) => {
+const currentChartHistory = computed(() => {
+  if (!selectedTargetForChart.value) return []
+  const key = selectedTargetForChart.value.isDevice
+    ? selectedTargetForChart.value.mac!
+    : selectedTargetForChart.value.bssid
+  return rssiHistoryMap.value[key] || []
+})
+
+const recordRssiHistory = (key: string, rssi: number, timeStr?: string) => {
   if (rssi === undefined || rssi === 0) return
-  if (!rssiHistoryMap.value[bssid]) {
-    rssiHistoryMap.value[bssid] = []
+  if (!rssiHistoryMap.value[key]) {
+    rssiHistoryMap.value[key] = []
   }
-  const history = rssiHistoryMap.value[bssid]
+  const history = rssiHistoryMap.value[key]
   const now = Date.now()
   const formattedTime = timeStr || new Date().toLocaleTimeString('sv-SE')
 
@@ -303,8 +324,30 @@ const recordRssiHistory = (bssid: string, rssi: number, timeStr?: string) => {
   }
 
   // If the chart modal is currently open for this target, update its live reference
-  if (selectedTargetForChart.value && selectedTargetForChart.value.bssid === bssid) {
+  const currentKey = selectedTargetForChart.value?.isDevice
+    ? selectedTargetForChart.value?.mac
+    : selectedTargetForChart.value?.bssid
+  if (selectedTargetForChart.value && currentKey === key) {
     selectedTargetForChart.value.rssi = rssi
+  }
+}
+
+const isTargetScanning = computed(() => {
+  return selectedTargetForChart.value ? deviceScanning.value === selectedTargetForChart.value.bssid : false
+})
+
+const isScanningOtherTarget = computed(() => {
+  return deviceScanning.value !== null && !isTargetScanning.value
+})
+
+const handleModalToggleScan = () => {
+  if (!selectedTargetForChart.value) return
+  const bssid = selectedTargetForChart.value.bssid
+  if (deviceScanning.value === bssid) {
+    stopDeviceScan(bssid)
+  } else {
+    const ch = selectedTargetForChart.value.channel || scanResults.value.find(a => a.bssid === bssid)?.channel || 1
+    startDeviceScan(bssid, ch, -1)
   }
 }
 
@@ -314,11 +357,27 @@ const openRssiModal = (ap: NetworkInfo) => {
     ssid: ap.ssid,
     rssi: ap.rssi,
     channel: ap.channel,
-    band: ap.band,
-    lastSeen: ap.lastSeen,
+    isDevice: false,
   }
   if (!rssiHistoryMap.value[ap.bssid] || rssiHistoryMap.value[ap.bssid].length === 0) {
     recordRssiHistory(ap.bssid, ap.rssi, ap.lastSeen)
+  }
+  rssiModalOpen.value = true
+}
+
+const openDeviceRssiModal = (ap: NetworkInfo, dev: DeviceInfo) => {
+  selectedTargetForChart.value = {
+    bssid: ap.bssid,
+    mac: dev.mac,
+    ssid: ap.ssid,
+    rssi: dev.rssi || 0,
+    channel: ap.channel,
+    isDevice: true,
+  }
+  if (!rssiHistoryMap.value[dev.mac] || rssiHistoryMap.value[dev.mac].length === 0) {
+    if (dev.rssi) {
+      recordRssiHistory(dev.mac, dev.rssi, dev.lastSeen)
+    }
   }
   rssiModalOpen.value = true
 }
@@ -366,7 +425,16 @@ const loadPersisted = () => {
         }
       }
     }
-    if (data.deviceResults) deviceResults.value = data.deviceResults
+    if (data.deviceResults) {
+      deviceResults.value = data.deviceResults
+      for (const devList of Object.values(deviceResults.value)) {
+        for (const dev of devList) {
+          if (dev.rssi && (!rssiHistoryMap.value[dev.mac] || rssiHistoryMap.value[dev.mac].length === 0)) {
+            recordRssiHistory(dev.mac, dev.rssi, dev.lastSeen)
+          }
+        }
+      }
+    }
     if (scanResults.value.length > 0) scanResultCount.value = scanResults.value.length
   } catch { /* ignore corrupt data */ }
 }
@@ -506,6 +574,9 @@ const deauthDevice = async (bssid: string, mac: string, channel: number) => {
 
 const clearDevices = (bssid: string) => {
   if (deviceResults.value[bssid]) {
+    for (const dev of deviceResults.value[bssid]) {
+      delete rssiHistoryMap.value[dev.mac]
+    }
     deviceResults.value[bssid] = []
   }
   if (deviceErrors.value[bssid]) {
@@ -573,7 +644,10 @@ const startDeviceScan = async (bssid: string, channel: number, duration?: number
                 existing.lastSeen = now
               }
               // RSSI: 始终取最新值（只要非零）
-              if (dev.rssi) existing.rssi = dev.rssi
+              if (dev.rssi) {
+                existing.rssi = dev.rssi
+                recordRssiHistory(dev.mac, dev.rssi, now)
+              }
             } else {
               // New device insertion
               deviceResults.value[bssid].push({
@@ -584,6 +658,9 @@ const startDeviceScan = async (bssid: string, channel: number, duration?: number
                 rssi: dev.rssi || 0,
                 lastSeen: now
               })
+              if (dev.rssi) {
+                recordRssiHistory(dev.mac, dev.rssi, now)
+              }
             }
           }
 
@@ -704,7 +781,7 @@ onUnmounted(() => {
     align-items: center;
     cursor: pointer;
     user-select: none;
-    padding:0.5rem 1rem;
+    padding: 0.35rem 1rem;
   }
   .dev-table-table {
     padding: 0 1rem;
@@ -719,5 +796,10 @@ onUnmounted(() => {
     color: var(--pico-muted-color) !important;
     cursor: not-allowed !important;
     pointer-events: none !important;
+  }
+  .inner-btn-col {
+    button:not(:last-child) {
+      margin-right: 0.25rem;
+    }
   }
 </style>

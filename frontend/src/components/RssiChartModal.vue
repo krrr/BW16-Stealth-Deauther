@@ -3,7 +3,7 @@
     <article class="rssi-modal-article">
       <header>
         <p class="modal-title">
-          <strong>Signal Graph: {{ target?.ssid || '(Hidden SSID)' }}</strong>
+          <strong>Signal Graph: {{ modalTitle }}</strong>
         </p>
         <div class="flex1"></div>
         <button aria-label="Close" rel="prev" @click="closeModal"></button>
@@ -14,12 +14,24 @@
         <canvas ref="canvasRef"></canvas>
       </div>
 
-      <!-- Signal Quality Legend & Status Bar -->
+      <!-- Signal Quality Legend & Actions Bar -->
       <div class="legend-bar">
         <div class="legend-items">
           <span class="legend-tag tag-green"><span class="dot"></span> Excellent (&ge; -55)</span>
           <span class="legend-tag tag-yellow"><span class="dot"></span> Good (-56 ~ -70)</span>
           <span class="legend-tag tag-red"><span class="dot"></span> Weak (&lt; -70)</span>
+        </div>
+        <div class="modal-actions" v-if="target">
+          <button
+            class="outline contrast btn-sm"
+            :aria-busy="isScanning"
+            :class="{ 'pointer-ev-auto': isScanning }"
+            :disabled="isScanningOther"
+            :title="isScanningOther ? 'Another device scan is currently in progress' : ''"
+            @click="emit('toggle-scan')"
+          >
+            <span>{{ isScanning ? 'Stop' : 'Start' }}</span>
+          </button>
         </div>
       </div>
     </article>
@@ -37,21 +49,34 @@ export interface RssiPoint {
 
 export interface RssiTarget {
   bssid: string
+  mac?: string
   ssid?: string
   rssi: number
   channel?: number
-  band?: string
-  lastSeen?: string
+  isDevice?: boolean
 }
 
 const props = defineProps<{
   open: boolean
   target: RssiTarget | null
   history: RssiPoint[]
+  isScanning?: boolean
+  isScanningOther?: boolean
 }>()
+
+const modalTitle = computed(() => {
+  if (!props.target) return ''
+  if (props.target.isDevice || props.target.mac) {
+    const devMac = props.target.mac || props.target.bssid
+    const network = props.target.ssid ? ` (${props.target.ssid})` : ''
+    return `${devMac}${network}`
+  }
+  return props.target.ssid || '(Hidden SSID)'
+})
 
 const emit = defineEmits<{
   (e: 'close'): void
+  (e: 'toggle-scan'): void
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -455,6 +480,12 @@ onUnmounted(() => {
       &.tag-yellow .dot { background-color: #f39c12; }
       &.tag-red .dot { background-color: #e74c3c; }
     }
+  }
+
+  .modal-actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
   }
 }
 
