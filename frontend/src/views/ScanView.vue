@@ -34,17 +34,17 @@
             <tbody>
               <tr>
                 <td>{{ ap.ssid || '(Hidden)' }}</td>
-                <td>
-                  <span style="font-family:monospace;font-size:0.85em;cursor:pointer" @click="openMacLookup(ap.bssid)">
+                <td class="smaller-td">
+                  <span style="font-family:monospace;cursor:pointer" @click="openMacLookup(ap.bssid)">
                     {{ ap.bssid }}
                   </span>
                   <span v-if="isVirtualMac(ap.bssid)" class="badge badge-red" style="font-size: 0.7em;">Virtual</span>
                 </td>
-                <td :style="{ color: rssiColor(ap.rssi), fontWeight: 'bold' }">{{ ap.rssi }} dBm</td>
+                <td :style="{ color: rssiColor(ap.rssi), fontWeight: 'bold' }">{{ ap.rssi }} <span class="dbm-unit">dBm</span></td>
                 <td>{{ ap.channel }}</td>
                 <td>{{ ap.band }}</td>
-                <td>{{ ap.security }}</td>
-                <td style="font-size:0.85em;">{{ ap.lastSeen }}</td>
+                <td class="smaller-td">{{ ap.security }}</td>
+                <td class="smaller-td">{{ ap.lastSeen }}</td>
                 <td class="btn-col">
                   <button
                     @click="deviceScanning === ap.bssid ? stopDeviceScan(ap.bssid) : startDeviceScan(ap.bssid, ap.channel)"
@@ -112,7 +112,7 @@
                               <span v-if="isVirtualMac(dev.mac)" class="badge badge-red">Virtual</span>
                             </td>
                             <td>
-                              <span v-if="dev.rssi" :style="{ color: rssiColor(dev.rssi), fontWeight: 'bold' }">{{ dev.rssi }} dBm</span>
+                              <span v-if="dev.rssi" :style="{ color: rssiColor(dev.rssi), fontWeight: 'bold' }">{{ dev.rssi }} <span class="dbm-unit">dBm</span></span>
                               <span v-else style="color:var(--muted-color)">—</span>
                             </td>
                             <td>{{ '↑' + (dev.packets_out || 0) + ' / ↓' + (dev.packets_in || 0) }}</td>
@@ -223,6 +223,7 @@ interface DeviceScanResponse {
   ap_uptime?: number
   pmf_capable?: boolean
   pmf_required?: boolean
+  ap_rssi?: number
 }
 
 interface TestDeauthResponse {
@@ -497,9 +498,13 @@ const startDeviceScan = async (bssid: string, channel: number) => {
             }
           }
 
-          if (data.ap_beacon_parsed) {
-            const ap = scanResults.value.find(a => a.bssid === bssid)
-            if (ap) {
+          const ap = scanResults.value.find(a => a.bssid === bssid)
+          if (ap) {
+            if (data.ap_rssi !== undefined && data.ap_rssi !== 0) {
+              ap.rssi = data.ap_rssi
+              ap.lastSeen = now
+            }
+            if (data.ap_beacon_parsed) {
               ap.advanced_info = {
                 uptime: data.ap_uptime,
                 pmfCapable: data.pmf_capable,
@@ -613,5 +618,11 @@ onUnmounted(() => {
   }
   .dev-table-table {
     padding: 0 1rem;
+  }
+  .smaller-td {
+    font-size:0.85em;
+  }
+  .dbm-unit {
+    font-size: 0.6rem;
   }
 </style>

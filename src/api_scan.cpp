@@ -176,6 +176,7 @@ typedef struct {
 
 typedef struct {
     bool ap_beacon_parsed;
+    int8_t ap_rssi;  // Target AP latest RSSI
     uint64_t ap_timestamp;
     bool pmf_capable;
     bool pmf_required;
@@ -362,15 +363,21 @@ static void deviceSniffCallback(unsigned char* buf, unsigned int len, void* user
         return;
     }
 
-    // Parse target AP's Beacon frame (type 0, subtype 8)
-    // 反正是顺便的，返回一些有趣信息
-    if (!g_scan_session->ap_beacon_parsed && type == 0 && subtype == 8) {
-        parseBeaconFrame(buf, len, g_scan_session);
-        g_scan_session->ap_beacon_parsed = true;
-    }
-
     const uint8_t* ta = addr2;
     const uint8_t* ra = addr1;
+
+    // ── 发送方为目标 AP 的处理（Beacon / Probe Resp / 下行数据等） ──
+    if (memcmp(ta, g_target_bssid, 6) == 0) {
+        if (rssi != 0) {
+            g_scan_session->ap_rssi = rssi;
+        }
+        // Parse target AP's Beacon frame (type 0, subtype 8)
+        // 反正是顺便的，返回一些有趣信息
+        if (!g_scan_session->ap_beacon_parsed && type == 0 && subtype == 8) {
+            parseBeaconFrame(buf, len, g_scan_session);
+            g_scan_session->ap_beacon_parsed = true;
+        }
+    }
 
     bool is_eapol = false;
     if (type == 2 && !(fc & 0x4000)) { // Data type and not protected
@@ -521,6 +528,10 @@ void handleDeviceScanApi(HttpClient& client) {
             doc["channel"] = target_channel;
             doc["count"] = g_device_count;
 
+            if (g_scan_session->ap_rssi != 0) {
+                doc["ap_rssi"] = g_scan_session->ap_rssi;
+            }
+
             if (g_scan_session->ap_beacon_parsed) {
                 doc["ap_beacon_parsed"] = true;
                 doc["ap_uptime"] = g_scan_session->ap_timestamp / 1000000ULL;
@@ -557,7 +568,8 @@ void handleDeviceScanApi(HttpClient& client) {
     wifi_set_promisc(RTW_PROMISC_DISABLE, NULL, 1);
     delay(50);  // 确保callback都执行完毕了
 
-    Serial.print("[SNIFF] Scan done, device_count="); Serial.println(g_device_count);
+    Serial.print("[SNIFF] Scan done, device_count="); Serial.print(g_device_count);
+    Serial.print(" ap_rssi="); Serial.println(g_scan_session->ap_rssi);
     for (int i = 0; i < g_device_count; i++) {
         Serial.print("[SNIFF]   device ");
         printBssid(g_scan_session->devices[i].mac);
