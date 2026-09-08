@@ -462,6 +462,7 @@ void handleDeviceScanApi(HttpClient& client) {
     // 虽然可以同时监听同一个信道的所有客户端，但是ap的频道可能比较分散。还是设计成针对每个ap扫描设备
     String bssidStr = client.queryParam("bssid");
     String chStr = client.queryParam("channel");
+    String durationStr = client.queryParam("duration");
 
     if (bssidStr.length() == 0 || chStr.length() == 0) {
         client.sendJsonFail("missing bssid or channel");
@@ -473,8 +474,22 @@ void handleDeviceScanApi(HttpClient& client) {
     }
     int target_channel = chStr.toInt();
 
+    uint32_t scan_timeout_ms = DEVICE_SCAN_TIMEOUT_MS;
+
+    if (durationStr.length() > 0) {
+        int d = durationStr.toInt();
+        scan_timeout_ms = (d < 0) ? UINT32_MAX : (unsigned int)d * 1000;
+    }
+
     Serial.print("[SNIFF] targetAp="); Serial.print(bssidStr);
-    Serial.print(" channel="); Serial.println(target_channel);
+    Serial.print(" channel="); Serial.print(target_channel);
+    Serial.print(" duration=");
+    if (scan_timeout_ms == UINT32_MAX) {
+        Serial.println("infinite");
+    } else {
+        Serial.print(scan_timeout_ms / 1000);
+        Serial.println("s");
+    }
 
     g_scan_session = new (std::nothrow) DeviceScanSession{};
     if (!g_scan_session) {
@@ -509,9 +524,9 @@ void handleDeviceScanApi(HttpClient& client) {
     // 发送 SSE 头部
     client.sendSseHeader();
 
-    unsigned long start = millis();
-    unsigned long last_send = 0;
-    while (millis() - start < DEVICE_SCAN_TIMEOUT_MS) {
+    uint32_t start = millis();
+    uint32_t last_send = 0;
+    while ((millis() - start < scan_timeout_ms)) {
         // 如果客户端主动断开，提前退出
         if (!client.connected()) {
             Serial.println("[SNIFF] SSE client disconnected, aborting scan");

@@ -57,6 +57,14 @@
                   </button>
                   <Dropdown summary-class="outline secondary btn-sm" align="right">
                     <li>
+                      <a
+                        :class="{ 'disabled-link': deviceScanning !== null }"
+                        @click.prevent="deviceScanning === null && startDeviceScan(ap.bssid, ap.channel, -1)"
+                      >
+                        Scan Devices Nonstop
+                      </a>
+                    </li>
+                    <li>
                       <a @click.prevent="clearDevices(ap.bssid)">
                         Clear Results
                       </a>
@@ -428,7 +436,7 @@ const clearDevices = (bssid: string) => {
   savePersisted()
 }
 
-const startDeviceScan = async (bssid: string, channel: number) => {
+const startDeviceScan = async (bssid: string, channel: number, duration?: number) => {
   if (deviceEventSource.value) {
     stopDeviceScan(deviceScanning.value || '')
   }
@@ -457,7 +465,10 @@ const startDeviceScan = async (bssid: string, channel: number) => {
   }
 
   try {
-    const url = `/api/scan-devices?bssid=${encodeURIComponent(bssid)}&channel=${channel}`
+    let url = `/api/scan-devices?bssid=${encodeURIComponent(bssid)}&channel=${channel}`
+    if (duration !== undefined) {
+      url += `&duration=${duration}`
+    }
     const es = new EventSource(url)
     deviceEventSource.value = es
 
@@ -624,5 +635,10 @@ onUnmounted(() => {
   }
   .dbm-unit {
     font-size: 0.6rem;
+  }
+  .disabled-link {
+    color: var(--pico-muted-color) !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
   }
 </style>
