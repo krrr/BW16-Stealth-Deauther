@@ -8,44 +8,9 @@ typedef uint32_t in_addr_t;
 #ifdef __cplusplus
 extern "C" {
 #include "rtl8721d_ota.h"
-#include "rtl8721d_flash.h"
-#include <device_lock.h>
 #include <lwip/sockets.h>
 }
 #endif
-
-// 自定义签名切换函数，正确适配 4MB Flash 的 LS_IMG2_OTA2_ADDR (0x08206000)
-static bool updateOtaSignature(update_ota_target_hdr* pOtaTgtHdr, uint32_t ota_target_index) {
-    uint32_t ota_old_addr = (ota_target_index == OTA_INDEX_1) ? LS_IMG2_OTA2_ADDR : LS_IMG2_OTA1_ADDR;
-    uint8_t zero_sig[4] = {0};
-
-    device_mutex_lock(RT_DEV_LOCK_FLASH);
-
-    // 1. 写入新目标分区的有效签名（激活新固件）
-    for (int i = 0; i < pOtaTgtHdr->ValidImgCnt; i++) {
-        uint32_t flash_offset = pOtaTgtHdr->FileImgHdr[i].FlashAddr - SPI_FLASH_BASE;
-        if (FLASH_WriteStream(flash_offset, 8, pOtaTgtHdr->Sign[i]) < 0) {
-            device_mutex_unlock(RT_DEV_LOCK_FLASH);
-            printf("[%s] [ERROR] Write target signature failed at 0x%08X\n", __FUNCTION__, (unsigned int)flash_offset);
-            return false;
-        }
-    }
-
-    // 2. 清除旧分区的签名（使旧固件失效）
-    for (int i = 0; i < pOtaTgtHdr->ValidImgCnt; i++) {
-        if (strncmp((const char*)pOtaTgtHdr->FileImgHdr[i].ImgId, "OTA", 3) == 0) {
-            uint32_t old_offset = ota_old_addr - SPI_FLASH_BASE;
-            if (FLASH_WriteStream(old_offset, 4, zero_sig) < 0) {
-                device_mutex_unlock(RT_DEV_LOCK_FLASH);
-                printf("[%s] [ERROR] Clear old signature failed at 0x%08X\n", __FUNCTION__, (unsigned int)old_offset);
-                return false;
-            }
-        }
-    }
-
-    device_mutex_unlock(RT_DEV_LOCK_FLASH);
-    return true;
-}
 
 void handleOtaApi(HttpClient& client) {
     int8_t sock_fd = client.getSock();
@@ -113,16 +78,17 @@ void handleOtaApi(HttpClient& client) {
         client.sendJsonFail("Parse firmware header failed");
         goto ota_exit;
     }
-
-    // 覆盖静态库预编译的 FlashAddr，强制指定 4MB 目标地址 (0x08206000 或 0x08006000)
-    OtaTargetHdr.FileImgHdr[0].FlashAddr = (ota_target_index == OTA_INDEX_1) ? LS_IMG2_OTA1_ADDR : LS_IMG2_OTA2_ADDR;
-    printf("[%s] Get OTA header done, target flash addr: 0x%08X\n", __FUNCTION__, (unsigned int)OtaTargetHdr.FileImgHdr[0].FlashAddr);
+    printf("[%s] Get OTA header done\n", __FUNCTION__);
 
 
     // Step 5: Erase flash space
-    printf("[%s] Erasing OTA target flash (0x%08X), length: %u...\n", __FUNCTION__, 
-           (unsigned int)OtaTargetHdr.FileImgHdr[0].FlashAddr, (unsigned int)OtaTargetHdr.FileImgHdr[0].ImgLen);
-    erase_ota_target_flash(OtaTargetHdr.FileImgHdr[0].FlashAddr, OtaTargetHdr.FileImgHdr[0].ImgLen);
+    if (ota_target_index == OTA_INDEX_1) {
+        printf("[%s] Erasing OTA target flash index 1 (0x%08X)...\n", __FUNCTION__, LS_IMG2_OTA1_ADDR);
+        erase_ota_target_flash(LS_IMG2_OTA1_ADDR, OtaTargetHdr.FileImgHdr[0].ImgLen);
+    } else {
+        printf("[%s] Erasing OTA target flash index 2 (0x%08X)...\n", __FUNCTION__, LS_IMG2_OTA2_ADDR);
+        erase_ota_target_flash(LS_IMG2_OTA2_ADDR, OtaTargetHdr.FileImgHdr[0].ImgLen);
+    }
     printf("[%s] Erase flash done\n", __FUNCTION__);
 
     // Step 6: Download new firmware and write to flash
@@ -137,7 +103,7 @@ void handleOtaApi(HttpClient& client) {
 
     // Step 7: Verify checksum and signature
     if (verify_ota_checksum(&OtaTargetHdr)) {
-        if (!updateOtaSignature(&OtaTargetHdr, ota_target_index)) {
+        if (!change_ota_signature(&OtaTargetHdr, ota_target_index)) {
             printf("[%s] [ERROR] Update OTA signature failed\n", __FUNCTION__);
             client.sendJsonFail("Update OTA signature failed");
             goto ota_exit;
@@ -169,4 +135,3 @@ ota_exit:
         ota_update_free(alloc);
     }
 }
-

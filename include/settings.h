@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 #define SETTINGS_MAGIC 0x574B3031  // "WK01"
-#define FLASH_MEMORY_APP_BASE 0x00200000  // 4MB flash
+#define FLASH_MEMORY_APP_BASE 0x00100000  // 2MB flash
 
 #pragma pack(push, 4)
 // 定时攻击目标（闪存持久化，加入时快照）
@@ -58,7 +58,7 @@ struct AppSettings {
 #pragma pack(pop)
 
 static_assert(offsetof(AppSettings, checksum) + sizeof(uint32_t) == sizeof(AppSettings), "AppSettings checksum must be at the very end with no trailing padding!");
-static_assert(sizeof(AppSettings) <= 8192, "AppSettings size exceeds 8KB limit!");
+static_assert(sizeof(AppSettings) <= 6 * 4096, "AppSettings size exceeds 24KB limit!");
 
 extern AppSettings g_appSettings;
 
