@@ -40,7 +40,11 @@
                   </span>
                   <span v-if="isVirtualMac(ap.bssid)" class="badge badge-red" style="font-size: 0.7em;">Virtual</span>
                 </td>
-                <td :style="{ color: rssiColor(ap.rssi), fontWeight: 'bold', cursor: 'pointer' }" title="View signal graph" @click="openRssiModal(ap)">{{ ap.rssi }} <span class="dbm-unit">dBm</span></td>
+                <td :style="{ color: rssiColor(ap.rssi), fontWeight: 'bold', cursor: 'pointer' }" title="View signal graph" @click="openRssiModal(ap)">
+                  <span v-flash="ap.rssi">
+                    {{ ap.rssi }} <span class="dbm-unit">dBm</span>
+                  </span>
+                </td>
                 <td>{{ ap.channel }}</td>
                 <td>{{ ap.band }}</td>
                 <td class="smaller-td">{{ ap.security }}</td>
@@ -87,7 +91,7 @@
                           style="transition: transform 0.2s;"
                           :style="isExpanded(ap.bssid) ? 'transform: rotate(180deg);' : 'transform: rotate(90deg);'"
                         />
-                        <small>Discovered Devices (<span>{{ deviceResults[ap.bssid]?.length || 0 }}</span>)</small>
+                        <small>Discovered Devices (<span v-flash="deviceResults[ap.bssid]?.length">{{ deviceResults[ap.bssid]?.length || 0 }}</span>)</small>
                       </div>
                       
                       <!-- Middle Area for AP Advanced Properties -->
@@ -129,11 +133,17 @@
                               title="View signal graph"
                               @click="openDeviceRssiModal(ap, dev)"
                             >
-                              <span v-if="dev.rssi" :style="{ color: rssiColor(dev.rssi), fontWeight: 'bold' }">{{ dev.rssi }} <span class="dbm-unit">dBm</span></span>
+                              <span v-if="dev.rssi" v-flash="dev.rssi" :style="{ color: rssiColor(dev.rssi), fontWeight: 'bold' }">{{ dev.rssi }} <span class="dbm-unit">dBm</span></span>
                               <span v-else style="color:var(--muted-color)">—</span>
                             </td>
-                            <td>{{ '↑' + (dev.packets_out || 0) + ' / ↓' + (dev.packets_in || 0) }}</td>
-                            <td>{{ dev.handshakes || 0 }}</td>
+                            <td style="white-space: nowrap;">
+                              <span v-flash="dev.packets_out">↑{{ dev.packets_out || 0 }}</span>
+                              <span style="margin: 0 0.15rem; color: var(--muted-color);">/</span>
+                              <span v-flash="dev.packets_in">↓{{ dev.packets_in || 0 }}</span>
+                            </td>
+                            <td>
+                              <span v-flash="dev.handshakes">{{ dev.handshakes || 0 }}</span>
+                            </td>
                             <td>{{ dev.lastSeen }}</td>
                             <td class="inner-btn-col">
                               <button
@@ -209,11 +219,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, type Directive } from 'vue'
 import Dropdown from '../components/Dropdown.vue'
 import RssiChartModal, { type RssiPoint, type RssiTarget } from '../components/RssiChartModal.vue'
 import { message } from '../utils/message'
 import { addTarget, loadPlan, type AttackTarget } from '../utils/attackPlan'
+
+// 自定义指令：仅在数据实际发生更新且变更时触发闪烁动画（避免初次挂载与展开列表时误闪）
+const vFlash: Directive<HTMLElement, any> = {
+  mounted(el, binding) {
+    (el as any)._prevFlashVal = binding.value
+  },
+  updated(el, binding) {
+    if (binding.value !== undefined && binding.value !== (el as any)._prevFlashVal) {
+      (el as any)._prevFlashVal = binding.value
+      el.classList.remove('data-flash')
+      void el.offsetWidth // 触发重绘以重置动画
+      el.classList.add('data-flash')
+      el.addEventListener(
+        'animationend',
+        () => { el.classList.remove('data-flash') },
+        { once: true }
+      )
+    }
+  }
+}
 
 interface ApAdvancedInfo {
   uptime?: number
@@ -801,5 +831,20 @@ onUnmounted(() => {
     button:not(:last-child) {
       margin-right: 0.25rem;
     }
+  }
+
+  @keyframes flash-fade {
+    0% {
+      background-color: #0172ad35;
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .data-flash {
+    display: inline-block;
+    border-radius: 4px;
+    animation: flash-fade 1.2s cubic-bezier(0.25, 1, 0.5, 1);
   }
 </style>
