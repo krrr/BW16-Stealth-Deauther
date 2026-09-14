@@ -7,7 +7,7 @@
       </header>
 
       <!-- Config panel -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;margin-bottom:1rem;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;">
         <label>
           Attack Type
           <select v-model="config.type" :disabled="saving">
@@ -28,18 +28,21 @@
           Power Save
           <small
             v-if="!apPowerSaveEnabled"
-            style="color:var(--muted-color);"
+            style="color:var(--pico-muted-color);"
             title="Enters light sleep between attack intervals (enable AP power save first)"
-          >(Enable AP power save in Settings first)</small>
+          >(Require AP power save)</small>
         </label>
       </div>
 
-      <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+      <div class="action-btn-div">
         <button @click="startAttack" :disabled="!canStart || saving" :aria-busy="saving" class="contrast">
           <span>{{ running ? 'Update & Restart' : 'Start Attack' }}</span>
         </button>
         <button v-if="running" @click="stopAttack" :disabled="saving" :aria-busy="saving" class="outline secondary">
           Stop
+        </button>
+        <button @click="openManualModal" :disabled="saving" class="outline secondary">
+          Add Target
         </button>
         <span v-if="running" style="color:#e74c3c;font-weight:bold;">
           ● {{ attackTypeLabel }} running
@@ -49,8 +52,8 @@
             · channel {{ apChannel }}
           </small>
         </span>
-        <span v-else-if="plan.targets.length > 0" style="color:var(--muted-color);font-size:0.9em;">
-          {{ plan.targets.length }} targets configured, not started (draft kept in browser session only)
+        <span v-else-if="plan.targets.length > 0" style="color:var(--pico-muted-color);font-size:0.9em;">
+          {{ plan.targets.length }} targets configured, not started
         </span>
       </div>
       <p v-if="errorMsg" role="alert" class="error">{{ errorMsg }}</p>
@@ -77,10 +80,13 @@
               </td>
               <td>
                 {{ t.ssid || '(Hidden)' }}
-                <small style="display:block;font-family:monospace;color:var(--muted-color);">{{ t.bssid }}</small>
+                <small style="display:block;font-family:monospace;color:var(--pico-muted-color);">{{ t.bssid }}</small>
               </td>
               <td>{{ t.channel }}</td>
-              <td :style="{ color: rssiColor(t.rssi), fontWeight: 'bold' }">{{ t.rssi }} dBm</td>
+              <td>
+                <span v-if="t.rssi" :style="{ color: rssiColor(t.rssi), fontWeight: 'bold' }">{{ t.rssi }} dBm</span>
+                <span v-else style="color:var(--pico-muted-color)">—</span>
+              </td>
               <td style="font-size:0.85em;">{{ t.addedAt || '—' }}</td>
               <td class="btn-col">
                 <button @click="removeFromPlan(t)" :disabled="saving" class="outline btn-sm" style="color:#e74c3c;border-color:#e74c3c;">
@@ -89,8 +95,8 @@
               </td>
             </tr>
             <tr v-if="plan.targets.length === 0">
-              <td colspan="6" style="text-align:center;color:var(--muted-color);">
-                No targets — scan devices on the Scan page and click "Attack" to add them
+              <td colspan="6" style="text-align:center;color:var(--pico-muted-color);padding: 1.5rem 1rem;">
+                No targets — scan devices on the Scan page or click "Add Target" to specify manually
               </td>
             </tr>
           </tbody>
@@ -101,14 +107,24 @@
         <small>Target additions/removals are kept in the browser session only; the full plan is written to device flash and the attack starts when you click Start. Stop also writes to flash.</small>
       </footer>
     </article>
+
+    <!-- Manual Target Modal -->
+    <AddTargetModal
+      :open="manualModalOpen"
+      :default-channel="apChannel"
+      :existing-targets="plan.targets"
+      @close="manualModalOpen = false"
+      @add="handleAddManualTarget"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from '../utils/message'
+import AddTargetModal from '../components/AddTargetModal.vue'
 import {
-  loadPlan, savePlan, removeTarget, hasPlan, defaultPlan,
+  loadPlan, savePlan, removeTarget, addTarget, hasPlan, defaultPlan,
   type AttackPlan, type AttackTarget, type AttackConfig,
 } from '../utils/attackPlan'
 
@@ -137,6 +153,18 @@ const status = reactive({ rounds: 0, packets: 0, next_fire_ms: 0 })
 const apPowerSaveEnabled = ref(false)
 const apChannel = ref<number | null>(null)
 let pollTimer: number | null = null
+
+const manualModalOpen = ref(false)
+
+const openManualModal = () => {
+  manualModalOpen.value = true
+}
+
+const handleAddManualTarget = (target: AttackTarget) => {
+  plan.value = addTarget(target)
+  config.value = { ...plan.value.config }
+  message.success(`Target added: ${target.mac}`)
+}
 
 const canStart = computed(() => plan.value.targets.length > 0 && !saving.value)
 
@@ -299,5 +327,12 @@ onUnmounted(() => {
 <style scoped lang="scss">
   .btn-col {
     white-space: nowrap;
+  }
+  .action-btn-div {
+    display:flex;
+    gap:0.75rem;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom: 0.8rem;
   }
 </style>

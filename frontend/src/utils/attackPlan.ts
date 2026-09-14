@@ -7,7 +7,7 @@ export interface AttackTarget {
   bssid: string
   ssid: string
   channel: number
-  rssi: number
+  rssi: number | null
   lastSeen?: string
   addedAt?: string
 }
