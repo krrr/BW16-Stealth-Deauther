@@ -379,6 +379,11 @@ static void deviceSniffCallback(unsigned char* buf, unsigned int len, void* user
         }
     }
 
+    // 忽略 Probe Request (subtype 4) 和 Probe Response (subtype 5)，避免将未连接/路过的设备识别为关联设备
+    if (type == 0 && (subtype == 4 || subtype == 5)) {
+        return;
+    }
+
     bool is_eapol = false;
     if (type == 2 && !(fc & 0x4000)) { // Data type and not protected
         unsigned int mac_hdr_len = 0;
