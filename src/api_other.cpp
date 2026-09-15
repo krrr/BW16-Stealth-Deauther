@@ -102,7 +102,7 @@ void handleStatusApi(HttpClient& client) {
     doc["free_heap"] = xPortGetFreeHeapSize();
     doc["ap_saver_state"] = apPowerSaveStateName();
 
-    BatteryStatus bat = readBatteryStatus();
+    BatteryStatus bat = getCachedBatteryStatus();
     JsonObject batObj = doc["battery"].to<JsonObject>();
     batObj["connected"] = bat.connected;
     batObj["voltage"] = serialized(String(bat.voltage, 2));

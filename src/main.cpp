@@ -15,6 +15,7 @@
 #include "wifi_drv.h"
 #include "lwip_netconf.h"
 #include "http/HttpServer.h"
+#include "battery.h"
 
 int ap_channel = 1;
 
@@ -167,6 +168,9 @@ void setup() {
 
     // 恢复闪存中的定时攻击计划
     attackerInit();
+
+    // 初始化电池 ADC 与首次采样缓存
+    batteryInit();
 }
 
 void loop() {
@@ -183,6 +187,9 @@ void loop() {
 
     // 占空比省电状态机（睡眠期间内部会分块阻塞等待唤醒）
     apPowerSaveTick();
+
+    // 电池状态轮询与低电量自动深度睡眠保护
+    batteryTick();
 
     // 让出 CPU：配合 tickless 在空闲时进入浅睡眠，同时避免忙轮询
     delay(1);
