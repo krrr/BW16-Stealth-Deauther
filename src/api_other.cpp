@@ -13,6 +13,7 @@
 #include "settings.h"
 #include "beacon_sync.h"
 #include "ap_powersave.h"
+#include "battery.h"
 #include <PowerSave.h>
 
 const char COMPILE_DATE[] = __DATE__;
@@ -100,9 +101,14 @@ void handleStatusApi(HttpClient& client) {
     doc["ap_channel"] = ap_channel;
     doc["free_heap"] = xPortGetFreeHeapSize();
     doc["ap_saver_state"] = apPowerSaveStateName();
-    doc["ap_saver_suspended"] = apPowerSaveIsSuspended();
-    doc["ap_saver_clients"] = apPowerSaveClientCount();
-    doc["ap_saver_next_on_sec"] = apPowerSaveNextOnInSec();
+
+    BatteryStatus bat = readBatteryStatus();
+    JsonObject batObj = doc["battery"].to<JsonObject>();
+    batObj["connected"] = bat.connected;
+    batObj["voltage"] = serialized(String(bat.voltage, 2));
+    batObj["level"] = bat.level;
+    batObj["percent"] = bat.percent;
+
     client.sendJson(doc);
 }
 

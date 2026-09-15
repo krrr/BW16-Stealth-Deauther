@@ -1,9 +1,13 @@
 <template>
   <main class="container">
     <nav class="container-fluid" style="margin-top: 1rem;">
-      <ul>
+      <ul class="nav-title">
         <li><strong>BW16 Stealth Deauther</strong></li>
       </ul>
+      <ul class="nav-battery">
+        <BatteryIndicator :battery="status.battery"/>
+      </ul>
+      <div class="flex1"></div>
       <ul class="tabs">
         <router-link to="/home">
           <li>Home</li>
@@ -39,10 +43,15 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import { message } from './utils/message'
+import BatteryIndicator from './components/BatteryIndicator.vue'
+import { useDeviceStatus } from './utils/deviceStatus'
 import successSvg from './assets/success.svg?raw'
 import errorSvg from './assets/error.svg?raw'
 import warningSvg from './assets/warning.svg?raw'
+
+const { status } = useDeviceStatus()
 
 const items = message.items
 const icons: Record<string, string> = {
@@ -53,6 +62,10 @@ const icons: Record<string, string> = {
 </script>
 
 <style scoped lang="scss">
+.nav-battery {
+  margin-left: 10px;
+}
+
 .tabs > a {
   margin: 0 var(--pico-nav-link-spacing-horizontal);
   padding: 0;
@@ -77,7 +90,7 @@ const icons: Record<string, string> = {
   }
   > li::before {
     content: "​";
-    background: var(--pico-primary);;
+    background: var(--pico-primary);
     width: 100%;
     display: block;
     height: 4px;

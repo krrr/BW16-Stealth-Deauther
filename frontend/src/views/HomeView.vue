@@ -21,6 +21,15 @@
           </button>
         </div>
       </div>
+      <p>
+        Battery: 
+        <span v-if="status.battery?.connected">
+          {{ status.battery.voltage.toFixed(2) }}V ({{ status.battery.percent }}% · {{ status.battery.level }}/4)
+        </span>
+        <span v-else style="color:var(--pico-muted-color);">
+          N/A
+        </span>
+      </p>
       <p v-if="formattedUptime">Uptime: {{ formattedUptime }}</p>
       <p v-if="freeHeap">Free Heap: {{ freeHeap }} KB</p>
       <p>
@@ -39,49 +48,52 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { message } from '../utils/message'
+import { useDeviceStatus } from '../utils/deviceStatus'
 
-interface StatusResponse {
-  uptime: number
-  ap_channel: number
-  compile_date: string
-  compile_time: string
-  rtc_time?: number
-  free_heap?: number
-}
+const { status, fetchDeviceStatus } = useDeviceStatus()
 
-const uptime = ref(-1)
-const apChannel = ref(-1)
 const selectedChannel = ref(-1)
 const switchingChannel = ref(false)
-const compileDate = ref('')
 const rtcTime = ref<Date | null>(null)
 const timeDiff = ref<number | null>(null)
-const freeHeap = ref('')
 
-const fetchStatus = async () => {
-  try {
-    const r = await fetch('/api/status')
-    const data: StatusResponse = await r.json()
-    uptime.value = data.uptime
-    apChannel.value = data.ap_channel
-    if (!switchingChannel.value) {
-      selectedChannel.value = data.ap_channel
-    }
-    compileDate.value = formattedCompileTime(data.compile_date, data.compile_time)
-    if (data.rtc_time !== undefined) {
-      // rtc_time returned by MCU is Unix timestamp in seconds, JS new Date() accepts milliseconds, so multiply by 1000.
-      rtcTime.value = new Date(data.rtc_time * 1000)
-      timeDiff.value = Math.abs(Math.floor(Date.now() / 1000) - data.rtc_time)
-    }
-    if (data.free_heap !== undefined) {
-      freeHeap.value = (data.free_heap / 1024).toFixed(1)
-    }
-  } catch (e) {
-    console.error('fetchStatus error:', e)
+const apChannel = computed(() => status.value.ap_channel)
+const freeHeap = computed(() => {
+  if (status.value.free_heap !== undefined) {
+    return (status.value.free_heap / 1024).toFixed(1)
+  }
+  return ''
+})
+
+const updateRtc = () => {
+  if (status.value.rtc_time !== undefined) {
+    // rtc_time returned by MCU is Unix timestamp in seconds, JS new Date() accepts milliseconds, so multiply by 1000.
+    rtcTime.value = new Date(status.value.rtc_time * 1000)
+    timeDiff.value = Math.abs(Math.floor(Date.now() / 1000) - status.value.rtc_time)
+  } else {
+    rtcTime.value = null
+    timeDiff.value = null
   }
 }
+
+watch(
+  () => status.value.rtc_time,
+  () => {
+    updateRtc()
+  }
+)
+
+watch(
+  () => status.value.ap_channel,
+  (newCh) => {
+    if (!switchingChannel.value && newCh > 0) {
+      selectedChannel.value = newCh
+    }
+  },
+  { immediate: true }
+)
 
 const changeChannel = async () => {
   if (selectedChannel.value === apChannel.value) return
@@ -94,7 +106,7 @@ const changeChannel = async () => {
     })
     const data = await r.json()
     if (data.success) {
-      apChannel.value = data.ap_channel
+      status.value.ap_channel = data.ap_channel
       selectedChannel.value = data.ap_channel
       message.success(`Channel successfully switched to ${data.ap_channel}`)
     } else {
@@ -116,6 +128,7 @@ const syncTime = async () => {
     const r = await fetch(`/api/set-time?t=${now}`)
     const data = await r.json()
     if (data.success) {
+      status.value.rtc_time = data.rtc_time
       rtcTime.value = new Date(data.rtc_time * 1000)
       timeDiff.value = 0
       message.success("Time synced successfully")
@@ -126,9 +139,9 @@ const syncTime = async () => {
 }
 
 const formattedUptime = computed(() => {
-  if (uptime.value < 0) return ''
-  const h = Math.floor(uptime.value / 3600)
-  const m = Math.floor((uptime.value % 3600) / 60)
+  if (status.value.uptime < 0) return ''
+  const h = Math.floor(status.value.uptime / 3600)
+  const m = Math.floor((status.value.uptime % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
   return `${m}m`
 })
@@ -140,8 +153,12 @@ const formattedCompileTime = (cDate: string, cTime: string): string => {
   return d.toLocaleString('sv-SE')
 }
 
-onMounted(() => {
-  fetchStatus()
+const compileDate = computed(() => {
+  return formattedCompileTime(status.value.compile_date, status.value.compile_time)
+})
+
+onMounted(async () => {
+  await fetchDeviceStatus()
 })
 </script>
 
