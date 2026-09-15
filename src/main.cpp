@@ -144,6 +144,9 @@ void startAP(const char* ssid, const char* password, int channel) {
 }
 
 void setup() {
+    // 将所有闲置/悬空 GPIO 配置为内部弱下拉，杜绝 I/O 漏电
+    gpioIdlePinsInit();
+
     Serial.begin(115200);
     delay(1000);
     Serial.println("\nBW16 Stealth Deauther init ...");

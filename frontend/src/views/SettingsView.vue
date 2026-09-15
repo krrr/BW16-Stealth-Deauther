@@ -201,7 +201,8 @@
           </button>
         </div>
         <div v-if="otaProgress !== null" style="margin-top: 0.5rem">
-          <progress :value="otaProgress" max="100"></progress>
+          <progress v-if="otaProgress < 100" :value="otaProgress" max="100"></progress>
+          <progress v-else></progress>
           <small style="font-size: 0.85rem">{{ otaStatusText }}</small>
         </div>
       </div>
