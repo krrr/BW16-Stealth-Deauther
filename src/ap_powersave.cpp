@@ -270,9 +270,6 @@ static void enterDutySleep(uint32_t now) {
     suspendSoftAP();
     uint32_t period_sec = g_appSettings.duty_period_sec;
     if (period_sec == 0) period_sec = 120; // 兜底保护，防止除以 0 导致 HardFault 死机
-    #if AP_PS_DEBUG
-    period_sec = 25;
-    #endif
 
     uint32_t elapsed = now - g_window_start_ms;
     uint32_t period_ms = period_sec * 1000;

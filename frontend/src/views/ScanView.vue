@@ -9,9 +9,20 @@
         <button @click="startScan" :aria-busy="scanning" :disabled="scanning" class="contrast" style="min-width:9rem;">
           <span>{{ scanning ? 'Scanning...' : 'Start Scan' }}</span>
         </button>
-        <button @click="clearAllPersisted" class="outline secondary" title="Clear Scanned Data" style="margin-left: auto; padding: 0.45rem 0.75rem; display: inline-flex; align-items: center; justify-content: center;">
-          <img src="../assets/clean.svg" width="20" height="20" alt="Clear" />
-        </button>
+        <div style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
+          <button
+            @click="exportToMarkdown"
+            class="outline secondary btn-icon-only"
+            title="Export to Markdown"
+            :disabled="scanResults.length === 0"
+            style=""
+          >
+            <img src="../assets/export.svg" width="20" height="20" alt="Export" />
+          </button>
+          <button @click="clearAllPersisted" class="outline secondary btn-icon-only" title="Clear Scanned Data">
+            <img src="../assets/clean.svg" width="20" height="20" alt="Clear" />
+          </button>
+        </div>
       </div>
 
       <p v-if="scanError" role="alert" class="error">{{ scanError }}</p>
@@ -224,6 +235,7 @@ import Dropdown from '../components/Dropdown.vue'
 import RssiChartModal, { type RssiPoint, type RssiTarget } from '../components/RssiChartModal.vue'
 import { message } from '../utils/message'
 import { addTarget, loadPlan, type AttackTarget } from '../utils/attackPlan'
+import { generateScanMarkdown, downloadMarkdown } from '../utils/exportMarkdown'
 
 // 自定义指令：仅在数据实际发生更新且变更时触发闪烁动画（避免初次挂载与展开列表时误闪）
 const vFlash: Directive<HTMLElement, any> = {
@@ -474,6 +486,16 @@ const savePersisted = () => {
     scanResults: scanResults.value,
     deviceResults: deviceResults.value,
   }))
+}
+
+const exportToMarkdown = () => {
+  if (scanResults.value.length === 0) {
+    message.warning('No scanned data to export')
+    return
+  }
+  const md = generateScanMarkdown(scanResults.value, deviceResults.value)
+  downloadMarkdown(md)
+  message.success('Exported to Markdown file')
 }
 
 const clearAllPersisted = () => {
