@@ -31,20 +31,29 @@ const status = ref<DeviceStatus>({
   }
 })
 
+const statusLoading = ref(false)
+const statusError = ref<string | null>(null)
+
 export const fetchDeviceStatus = async (): Promise<DeviceStatus | null> => {
+  statusLoading.value = true
+  statusError.value = null
   try {
     const res = await fetch('/api/status')
-    if (res.ok) {
-      const data: DeviceStatus = await res.json()
-      status.value = data
-      return data
+    if (!res.ok) {
+      throw new Error(`HTTP error ${res.status}`)
     }
-  } catch (err) {
+    const data: DeviceStatus = await res.json()
+    status.value = data
+    return data
+  } catch (err: any) {
     console.error('Failed to fetch device status:', err)
+    statusError.value = err?.message || 'Failed to fetch status'
+    return null
+  } finally {
+    statusLoading.value = false
   }
-  return null
 }
 
 export const useDeviceStatus = () => {
-  return { status, fetchDeviceStatus, }
+  return { status, statusLoading, statusError, fetchDeviceStatus }
 }

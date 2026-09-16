@@ -5,42 +5,52 @@
         <img src="../assets/dashboard.svg" />
         <h1>Status</h1>
       </header>
-      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;">
-        <span>Current Channel: </span>
-        <div style="display:flex;gap:0.4rem;align-items:center;">
-          <select v-model.number="selectedChannel" class="chan-sel">
-            <optgroup label="2.4 GHz">
-              <option v-for="ch in [1,2,3,4,5,6,7,8,9,10,11,12,13,14]" :key="ch" :value="ch">CH {{ ch }}</option>
-            </optgroup>
-            <optgroup label="5 GHz">
-              <option v-for="ch in [36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,144,149,153,157,161,165]" :key="ch" :value="ch">CH {{ ch }}</option>
-            </optgroup>
-          </select>
-          <button @click="changeChannel" :disabled="switchingChannel || selectedChannel === apChannel" :aria-busy="switchingChannel" class="outline contrast btn-sm" style="margin-left: 6px">
-            Switch
-          </button>
-        </div>
+      <div v-if="statusLoading" style="padding: 1.5rem 0;">
+        <span aria-busy="true">Loading...</span>
       </div>
-      <p>
-        Battery: 
-        <span v-if="status.battery?.connected">
-          {{ status.battery.voltage.toFixed(2) }}V ({{ status.battery.percent }}% · {{ status.battery.level }}/4)
-        </span>
-        <span v-else style="color:var(--pico-muted-color);">
-          N/A
-        </span>
-      </p>
-      <p v-if="formattedUptime">Uptime: {{ formattedUptime }}</p>
-      <p v-if="freeHeap">Free Heap: {{ freeHeap }} KB</p>
-      <p>
-        RTC Time: <span>{{ rtcTime ? rtcTime.toLocaleString('sv-SE') : 'Not Set' }}</span>
-        <span v-if="timeDiff !== null && timeDiff > 30" style="color:var(--del-color,#c0392b);font-size:0.9em;">
-          (Offset <span>{{ Math.round(timeDiff) }}</span> s)
-        </span>
-        <button v-if="timeDiff !== null && timeDiff > 1" @click="syncTime" class="outline contrast btn-sm" style="margin-left:0.4rem">Sync Time</button>
-      </p>
+      <div v-else-if="statusError" style="padding: 1.5rem 0;">
+        <p style="color: var(--pico-del-color, #c0392b); margin-bottom: 1rem;">
+          Failed to load device status ({{ statusError }})
+        </p>
+      </div>
+      <div v-else>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;">
+          <span>Current Channel: </span>
+          <div style="display:flex;gap:0.4rem;align-items:center;">
+            <select v-model.number="selectedChannel" class="chan-sel">
+              <optgroup label="2.4 GHz">
+                <option v-for="ch in [1,2,3,4,5,6,7,8,9,10,11,12,13,14]" :key="ch" :value="ch">CH {{ ch }}</option>
+              </optgroup>
+              <optgroup label="5 GHz">
+                <option v-for="ch in [36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,144,149,153,157,161,165]" :key="ch" :value="ch">CH {{ ch }}</option>
+              </optgroup>
+            </select>
+            <button @click="changeChannel" :disabled="switchingChannel || selectedChannel === apChannel" :aria-busy="switchingChannel" class="outline contrast btn-sm" style="margin-left: 6px">
+              Switch
+            </button>
+          </div>
+        </div>
+        <p>
+          Battery: 
+          <span v-if="status.battery?.connected">
+            {{ status.battery.voltage.toFixed(2) }}V ({{ status.battery.percent }}% · {{ status.battery.level }}/4)
+          </span>
+          <span v-else style="color:var(--pico-muted-color);">
+            N/A
+          </span>
+        </p>
+        <p v-if="formattedUptime">Uptime: {{ formattedUptime }}</p>
+        <p v-if="freeHeap">Free Heap: {{ freeHeap }} KB</p>
+        <p>
+          RTC Time: <span>{{ rtcTime ? rtcTime.toLocaleString('sv-SE') : 'Not Set' }}</span>
+          <span v-if="timeDiff !== null && timeDiff > 30" style="color:var(--del-color,#c0392b);font-size:0.9em;">
+            (Offset <span>{{ Math.round(timeDiff) }}</span> s)
+          </span>
+          <button v-if="timeDiff !== null && timeDiff > 1" @click="syncTime" class="outline contrast btn-sm" style="margin-left:0.4rem">Sync Time</button>
+        </p>
+      </div>
       <footer>
-        <small v-if="compileDate">Firmware Build: {{ compileDate }}</small>
+        <small >Firmware Build: {{ compileDate || 'N/A' }}</small>
         <small style="float: right">by <a href="https://github.com/krrr" target="_blank">krrr</a></small>
       </footer>
     </article>
@@ -52,7 +62,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { message } from '../utils/message'
 import { useDeviceStatus } from '../utils/deviceStatus'
 
-const { status, fetchDeviceStatus } = useDeviceStatus()
+const { status, statusLoading, statusError, fetchDeviceStatus } = useDeviceStatus()
 
 const selectedChannel = ref(-1)
 const switchingChannel = ref(false)
@@ -157,8 +167,8 @@ const compileDate = computed(() => {
   return formattedCompileTime(status.value.compile_date, status.value.compile_time)
 })
 
-onMounted(async () => {
-  await fetchDeviceStatus()
+onMounted(() => {
+  fetchDeviceStatus()
 })
 </script>
 
