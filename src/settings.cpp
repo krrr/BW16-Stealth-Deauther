@@ -44,10 +44,9 @@ static void setDefaultSettings() {
     g_appSettings.client_hold_sec = 15;
     g_appSettings.schedule_enable = 0;
     g_appSettings.schedule_hours_mask = 0;
-    // 定时攻击默认关闭，间隔 5 秒，攻击省电模式关闭（与 ap_powersave_enable 联动校验）
+    // 定时攻击默认关闭，间隔 5 秒
     g_appSettings.attack_enabled = 0;
     g_appSettings.attack_type = 0; // DEAUTH
-    g_appSettings.attack_ps_enable = 0;
     g_appSettings.attack_interval_ms = 5000;  // 5 秒
     g_appSettings.attack_target_count = 0;
 }

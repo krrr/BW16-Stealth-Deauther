@@ -18,19 +18,14 @@
           Attack Interval (s)
           <input type="number" min="1" max="3600" step="0.1" v-model.number="config.intervalSec" :disabled="saving" />
         </label>
-        <label style="display:flex;align-items:center;margin-top:1rem;">
-          <input
-            type="checkbox"
-            v-model="config.psEnable"
-            :disabled="!apPowerSaveEnabled || saving"
-            role="switch"
-          />
-          Power Save
-          <small
-            v-if="!apPowerSaveEnabled"
-            style="color:var(--pico-muted-color);"
-            title="Enters light sleep between attack intervals (enable AP power save first)"
-          >(Require AP power save)</small>
+        <label>
+          Power Save (AP)
+          <span class="ap-status">
+            <span class="ap-status-dot"
+              :style="{ backgroundColor: apPowerSaveEnabled ? '#27ae60' : '#95a5a6' }"
+            ></span>
+            <strong>{{ apPowerSaveEnabled ? 'Enabled' : 'Disabled' }}</strong>
+          </span>
         </label>
       </div>
 
@@ -133,7 +128,6 @@ interface AttackStatus {
   enabled: boolean
   type: string
   interval_sec: number
-  ps_enable: boolean
   ap_powersave_enabled: boolean
   ap_saver_state: string
   rounds: number
@@ -201,7 +195,6 @@ const startAttack = async () => {
         enabled: true,
         type: config.value.type,
         interval_sec: config.value.intervalSec,
-        ps_enable: config.value.psEnable,
         targets: plan.value.targets.map(t => ({
           mac: t.mac,
           bssid: t.bssid,
@@ -238,7 +231,6 @@ const stopAttack = async () => {
         enabled: false,
         type: config.value.type,
         interval_sec: config.value.intervalSec,
-        ps_enable: config.value.psEnable,
         targets: plan.value.targets.map(t => ({
           mac: t.mac,
           bssid: t.bssid,
@@ -275,10 +267,6 @@ const fetchStatus = async () => {
     status.next_fire_ms = data.next_fire_ms
     apPowerSaveEnabled.value = data.ap_powersave_enabled
     
-    // Power save is unavailable when AP power save is off; force it off to avoid rejection on submit
-    if (!data.ap_powersave_enabled && config.value.psEnable) {
-      config.value.psEnable = false
-    }
     if (data.ap_channel !== undefined) apChannel.value = data.ap_channel
     // When no draft exists (e.g. new tab / first visit after reboot), init draft from the device's current plan
     if (!hasPlan()) {
@@ -291,7 +279,6 @@ const fetchStatus = async () => {
         config: {
           type: data.type === 'unknown' ? 'deauth' : data.type,
           intervalSec: data.interval_sec,
-          psEnable: data.ps_enable,
         },
       }
       config.value = { ...plan.value.config }
@@ -334,5 +321,18 @@ onUnmounted(() => {
     align-items:center;
     flex-wrap:wrap;
     margin-bottom: 0.8rem;
+  }
+  .ap-status {
+    margin-top: calc(var(--pico-spacing) * .25);
+    display:flex;
+    align-items:center;
+    gap:0.4rem;
+    padding: 9px 0;
+  }
+  .ap-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
   }
 </style>

@@ -46,10 +46,8 @@ struct AppSettings {
     // === 定时攻击（前端"开始/停止"时一次性提交完整计划落盘） ===
     uint8_t attack_enabled;      // 1 = 攻击运行中（重启后自动恢复）
     uint8_t attack_type;         // 0 = deauth（预留扩展）
-    uint8_t attack_ps_enable;    // 攻击省电模式（仅 ap_powersave_enable==1 时允许）
-    uint8_t attack_reserved;     // Alignment padding
     uint8_t attack_target_count; // 有效目标数量
-    uint8_t attack_reserved2[3]; // Alignment padding
+    uint8_t attack_reserved[1];  // Alignment padding
     AttackTargetRecord attack_targets[16];
     uint32_t attack_interval_ms; // 攻击间隔（毫秒），支持小数秒，1000..3600000
 

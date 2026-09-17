@@ -22,7 +22,6 @@ extern "C" {
 
 #define ATTACK_BOOT_HOLD_SEC 30  // 开机延迟 30 秒执行攻击（出bug时不至于拖 SoftAP 下水）
 #define ATTACK_ROUND_PACKETS 4      // 每个目标每轮发包数（与 test-deauth 一致）
-#define ATTACK_SLEEP_CHUNK_MS 1000  // 省电模式下分块浅睡眠时长
 
 // 引擎状态（统计与运行标志不落盘）
 static volatile bool g_attack_running = false;
@@ -135,12 +134,6 @@ static void onBootGracePeriodExpired(TimerHandle_t xTimer) {
 void attackerInit() {
     g_attack_running = false;
 
-    // 持久化的攻击省电与 AP 省电状态冲突时仅内存关闭（不改盘）
-    if (g_appSettings.attack_ps_enable == 1 && g_appSettings.ap_powersave_enable != 1) {
-        Serial.println("[ATTACK] attack ps disabled: AP power save not enabled");
-        g_appSettings.attack_ps_enable = 0;
-    }
-
     // 重启后如果攻击计划处于开启状态，推迟 30 秒执行（给 SoftAP 连接预留安全窗口）
     if (g_appSettings.attack_enabled == 1 && g_appSettings.attack_target_count > 0) {
         if (s_bootDelayTimer == NULL) {
@@ -168,17 +161,6 @@ void attackerTick() {
 
     uint32_t now = millis();
     if (now < g_next_fire_ms) {
-        if (g_appSettings.attack_ps_enable == 1 && apPowerSaveIsSuspended()) {
-            // 攻击间隔进入浅度睡眠：分块释放 wakelock，让 CPU 进入 tickless 浅睡眠
-            // 仅在 SoftAP 处于挂起休眠状态时才允许进入浅睡，避免在 AP 开启唤醒期间阻塞 SoftAP 通信与 HTTP 服务
-            // 分块 ≤1s，保证 HTTP 请求与定时器仍能及时处理
-            uint32_t remaining = g_next_fire_ms - now;
-            uint32_t sleep_ms = (remaining < ATTACK_SLEEP_CHUNK_MS) ? remaining : ATTACK_SLEEP_CHUNK_MS;
-            pmu_set_max_sleep_time(sleep_ms);
-            pmu_release_wakelock(PMU_OS);
-            delay(sleep_ms);
-            pmu_acquire_wakelock(PMU_OS);
-        }
         return;
     }
 
@@ -199,7 +181,6 @@ void handleAttackStatusApi(HttpClient& client) {
     doc["enabled"] = g_attack_running;
     doc["type"] = (g_appSettings.attack_type == ATTACK_TYPE_DEAUTH) ? "deauth" : "unknown";
     doc["interval_sec"] = g_appSettings.attack_interval_ms / 1000.0;
-    doc["ps_enable"] = (g_appSettings.attack_ps_enable == 1);
     doc["ap_powersave_enabled"] = (g_appSettings.ap_powersave_enable == 1);
     doc["ap_saver_state"] = apPowerSaveStateName();
     doc["ap_channel"] = ap_channel;
@@ -267,12 +248,6 @@ void handleAttackPlanApi(HttpClient& client) {
     }
     uint32_t interval_ms = (uint32_t)(interval_sec * 1000.0 + 0.5);
 
-    bool ps = req["ps_enable"] | false;
-    if (ps && g_appSettings.ap_powersave_enable != 1) {
-        client.sendJsonFail("Attack power save requires AP power save enabled");
-        return;
-    }
-
     // 校验并解析目标列表
     AttackTargetRecord parsed[MAX_ATTACK_TARGETS];
     int count = 0;
@@ -316,7 +291,6 @@ void handleAttackPlanApi(HttpClient& client) {
     // 一次性写入闪存（开始/停止时，避免频繁擦写）
     g_appSettings.attack_enabled = enable ? 1 : 0;
     g_appSettings.attack_type = (uint8_t)type;
-    g_appSettings.attack_ps_enable = ps ? 1 : 0;
     g_appSettings.attack_interval_ms = interval_ms;
     g_appSettings.attack_target_count = (uint8_t)count;
     for (int i = 0; i < count; i++) {
@@ -346,9 +320,7 @@ void handleAttackPlanApi(HttpClient& client) {
         Serial.print("[ATTACK] plan started, targets=");
         Serial.print(count);
         Serial.print(" interval=");
-        Serial.print(g_appSettings.attack_interval_ms / 1000.0f);
-        Serial.print("s ps=");
-        Serial.println(ps);
+        Serial.println(g_appSettings.attack_interval_ms / 1000.0f);
     } else {
         g_attack_running = false;
         switchChannel(g_start_channel);  // 恢复攻击启动前信道

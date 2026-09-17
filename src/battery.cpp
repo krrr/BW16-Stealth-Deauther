@@ -2,20 +2,19 @@
 #include "battery.h"
 #include <Arduino.h>
 #include <PowerSave.h>
+#include "analogin_api.h"
 
-#define BATTERY_ADC_PIN         PB3
 #define VOLTAGE_DIVIDER_RATIO   2.0f      // 1M + 1M 分压，比例为 2.0
-#define ADC_REF_VOLTAGE_MV      3300.0f   // ADC 基准电压 3.3V
-#define ADC_MAX_VAL             4095.0f   // 12-bit ADC 最大量程
 #define SAMPLE_COUNT            16        // 滑动窗口样本容量（多点采样减少射频毛刺影响）
 #define SAMPLE_INTERVAL_MS      1000      // 单次采样间隔（消除高阻抗影响，至少200ms以上让100nF电容有时间充电)
 #define BATTERY_MIN_VALID_VOLT  2.50f     // 低于该值视为未接电池
 
 static bool s_adc_initialized = false;
+static analogin_t s_battery_adc;
 static BatteryStatus s_cached_status = {false, 0.0f, 0, 0};
 
 // 滑动窗口环形队列
-static uint32_t s_samples[SAMPLE_COUNT];
+static uint16_t s_samples[SAMPLE_COUNT];
 static uint8_t  s_sample_idx = 0;
 static uint32_t s_last_sample_ms = 0;
 static uint32_t s_last_protect_check_ms = 0;
@@ -58,8 +57,8 @@ static uint8_t calculateLevel(float v) {
 }
 
 // 从样本队列中进行中值滤波与极值剔除，计算当前电池状态
-static BatteryStatus computeStatusFromSamples(const uint32_t raw_samples[SAMPLE_COUNT]) {
-    uint32_t sorted[SAMPLE_COUNT];
+static BatteryStatus computeStatusFromSamples(const uint16_t raw_samples[SAMPLE_COUNT]) {
+    uint16_t sorted[SAMPLE_COUNT];
     memcpy(sorted, raw_samples, sizeof(sorted));
 
     // 排序以剔除最高与最低极值
@@ -72,10 +71,16 @@ static BatteryStatus computeStatusFromSamples(const uint32_t raw_samples[SAMPLE_
     for (int i = trim; i < SAMPLE_COUNT - trim; i++) {
         sum += sorted[i];
     }
-    float avg_adc = (float)sum / valid_count;
+    uint32_t avg_raw = sum / valid_count;
 
-    // 计算 PB3 引脚电压 (mV) -> 电池实际电压 (V)
-    float pin_mv = (avg_adc * ADC_REF_VOLTAGE_MV) / ADC_MAX_VAL;
+    // 使用 SDK 原厂校准函数 ADC_GetVoltage 转换引脚电压 (mV) -> 电池实际电压 (V)
+    float pin_mv = 0.0f;
+    if (avg_raw >= 0xFA) {
+        s32 vol_mv = ADC_GetVoltage(avg_raw);
+        if (vol_mv > 0) {
+            pin_mv = (float)vol_mv;
+        }
+    }
     float vbat_v = (pin_mv * VOLTAGE_DIVIDER_RATIO) / 1000.0f;
 
     BatteryStatus status;
@@ -98,11 +103,12 @@ static BatteryStatus computeStatusFromSamples(const uint32_t raw_samples[SAMPLE_
 
 void batteryInit() {
     if (!s_adc_initialized) {
-        analogReadResolution(12);
+        // 初始化 ADC 硬件（AD_6 对应 PB_3 引脚）
+        analogin_init(&s_battery_adc, AD_6);
         s_adc_initialized = true;
 
         // 冷启动初值快速填充，确保启动瞬间即可读到有效状态
-        uint32_t init_raw = analogRead(BATTERY_ADC_PIN);
+        uint16_t init_raw = analogin_read_u16(&s_battery_adc);
         for (int i = 0; i < SAMPLE_COUNT; i++) {
             s_samples[i] = init_raw;
         }
@@ -127,11 +133,11 @@ void batteryTick() {
 
     uint32_t now = millis();
 
-    // 1. 滑动窗口采样：每 SAMPLE_INTERVAL_MS (500ms) 采 1 个点
+    // 1. 滑动窗口采样：每 SAMPLE_INTERVAL_MS 采 1 个点（直接读取已初始化的 ADC）
     if (now - s_last_sample_ms >= SAMPLE_INTERVAL_MS) {
         s_last_sample_ms = now;
 
-        s_samples[s_sample_idx] = analogRead(BATTERY_ADC_PIN);
+        s_samples[s_sample_idx] = analogin_read_u16(&s_battery_adc);
         s_sample_idx = (s_sample_idx + 1) % SAMPLE_COUNT;
 
         // 实时刷新滑动窗口计算结果

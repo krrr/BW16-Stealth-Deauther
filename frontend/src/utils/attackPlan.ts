@@ -15,7 +15,6 @@ export interface AttackTarget {
 export interface AttackConfig {
   type: string        // 'deauth'
   intervalSec: number // 1..3600
-  psEnable: boolean
 }
 
 export interface AttackPlan {
@@ -28,7 +27,6 @@ const STORAGE_KEY = 'attack_plan_draft'
 export const defaultConfig = (): AttackConfig => ({
   type: 'deauth',
   intervalSec: 5,
-  psEnable: false,
 })
 
 export const defaultPlan = (): AttackPlan => ({
