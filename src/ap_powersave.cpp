@@ -41,6 +41,7 @@ static bool g_schedule_empty_warned = false; // 已提示"调度开启但未选�
 
 static const uint32_t CLIENT_POLL_INTERVAL_MS = 2000;
 static const uint32_t SLEEP_CHUNK_MS = 2000;
+static const uint32_t SCHEDULE_OFF_SLEEP_CHUNK_S = 10;
 
 // 开机后强制保持 AP 开启的时长（秒）：即使当前时间不在允许调度内，也不在此时间段内关闭 AP
 #define BOOT_AP_HOLD_SEC 30
@@ -408,7 +409,7 @@ static void tickScheduleOff() {
         enterApOn();
         return;
     }
-    uint32_t chunk_sec = (remaining_sec < 60) ? remaining_sec : 60;
+    uint32_t chunk_sec = min(remaining_sec, SCHEDULE_OFF_SLEEP_CHUNK_S);
     uint32_t chunk_ms = chunk_sec * 1000;
 
     // 攻击感知：分块不超过距下次攻击开火的时间，保证定时攻击准点醒开发包

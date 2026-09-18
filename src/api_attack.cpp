@@ -8,6 +8,7 @@
 #include "wifi_cust_tx.h"
 #include "utils.h"
 #include "wifi_drv.h"
+#include "wdt_api.h"
 
 // extern "C" void* alloc_mgtxmitframe(void* ptr);
 // extern "C" void update_mgntframe_attrib(void* ptr, void* frame_control);
@@ -133,6 +134,8 @@ void handleTestDeauthApi(HttpClient& client) {
     g_deauth_is_broadcast_mac = isBroadcastMac(mac);
     g_deauth_handshake_detected = false;
 
+    watchdog_refresh();
+
     for (int r = 0; r < rounds; r++) {
         for (int p = 0; p < ROUND_PACKETS; p++) {
             // 伪造客户端单方向往AP发送deauth帧已经足够，目的不是尽快触发重新握手而是DoS攻击
@@ -170,11 +173,13 @@ void handleTestDeauthApi(HttpClient& client) {
                 last_ping = millis();
                 client.sendSseData("{\"status\":\"listening\"}");
             }
+            watchdog_refresh();
             delay(50);
         }
 
         wifi_set_promisc(RTW_PROMISC_DISABLE, NULL, 1);
         delay(50);  // 确保callback都执行完毕了
+        watchdog_refresh();
     } else {
         Serial.println("[DEAUTH] Failed to enable promiscuous mode");
         listen_ms = -1;

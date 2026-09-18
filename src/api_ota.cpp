@@ -2,6 +2,7 @@
 #include "api_all.h"
 #include "http/HttpClient.h"
 #include "OTA.h"
+#include "wdt_api.h"
 
 typedef uint32_t in_addr_t;
 
@@ -82,6 +83,7 @@ void handleOtaApi(HttpClient& client) {
 
 
     // Step 5: Erase flash space
+    watchdog_refresh();
     if (ota_target_index == OTA_INDEX_1) {
         printf("[%s] Erasing OTA target flash index 1 (0x%08X)...\n", __FUNCTION__, LS_IMG2_OTA1_ADDR);
         erase_ota_target_flash(LS_IMG2_OTA1_ADDR, OtaTargetHdr.FileImgHdr[0].ImgLen);
@@ -90,6 +92,7 @@ void handleOtaApi(HttpClient& client) {
         erase_ota_target_flash(LS_IMG2_OTA2_ADDR, OtaTargetHdr.FileImgHdr[0].ImgLen);
     }
     printf("[%s] Erase flash done\n", __FUNCTION__);
+    watchdog_refresh();
 
     // Step 6: Download new firmware and write to flash
     // 固件文件头部有长度信息，库会自己判断。无需读取http的content-length
@@ -100,6 +103,7 @@ void handleOtaApi(HttpClient& client) {
         goto ota_exit;
     }
     printf("\n[%s] Download new firmware done\n", __FUNCTION__);
+    watchdog_refresh();
 
     // Step 7: Verify checksum and signature
     if (verify_ota_checksum(&OtaTargetHdr)) {

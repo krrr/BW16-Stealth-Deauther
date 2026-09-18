@@ -8,6 +8,7 @@
 #include "api_all.h"
 #include "wifi_drv.h"
 #include "utils.h"
+#include "wdt_api.h"
 
 
 #define SCAN_TIMEOUT_MS 15000  // 一般10秒内就好了
@@ -109,6 +110,8 @@ void handleApScanApi(HttpClient& client) {
 
     Serial.println("[SNIFF] AP scan start");
     unsigned long start = millis();
+    watchdog_refresh(); // 扫描前清零看门狗计时，获取完整超时窗口
+
     // 必须使用 _mcc 版本：普通 wifi_scan_networks 在STA+AP并发模式下 STA 链路未完整初始化，扫描结果为空
     // wifi_scan_networks_mcc() 是 SDK 专为并发模式设计的逐信道扫描版本，
     // 它逐个信道调用 wext_set_scan + 信道间插入 100ms 间隔让 AP 发送信标，
@@ -121,6 +124,7 @@ void handleApScanApi(HttpClient& client) {
         return;
     }
     while (g_scan_state == SCAN_RUNNING && millis() - start < SCAN_TIMEOUT_MS) {
+        watchdog_refresh();
         delay(30);
     }
 
@@ -577,6 +581,7 @@ void handleDeviceScanApi(HttpClient& client) {
 
             client.sendSseData(doc);
         }
+        watchdog_refresh();
         delay(50);
     }
 

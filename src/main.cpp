@@ -16,8 +16,11 @@
 #include "lwip_netconf.h"
 #include "http/HttpServer.h"
 #include "battery.h"
+#include <WDT.h>
 
 int ap_channel = 1;
+
+WDT g_wdt;
 
 HttpServer server(80);
 
@@ -174,9 +177,16 @@ void setup() {
 
     // 初始化电池 ADC 与首次采样缓存
     batteryInit();
+
+    // 初始化硬件看门狗（30秒超时）
+    g_wdt.InitWatchdog(30000);
+    g_wdt.StartWatchdog();
+    Serial.println("[INFO] Watchdog timer started (30s timeout).");
 }
 
 void loop() {
+    g_wdt.RefreshWatchdog();
+
     HttpClient client = server.available();
     if (client) {
         if (client.parseRequest()) {
