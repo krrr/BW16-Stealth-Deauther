@@ -259,7 +259,7 @@ uint32_t apPowerSaveNextOnInSec() {
             return (g_wake_at_ms - now) / 1000;
         }
         case ApPowerSaveState::SCHEDULE_OFF: {
-            if (!rtcTimeValid()) return 0;
+            if (!rtcTimeValid() || hourAllowed(rtc_read())) return 0;
             return nextAllowedHourStart(rtc_read()) - rtc_read();
         }
     }
@@ -403,6 +403,12 @@ static void tickScheduleOff() {
     }
 
     uint32_t rtc_now = rtc_read();
+    // 当前小时已进入允许开启时段：恢复 AP
+    if (hourAllowed(rtc_now)) {
+        enterApOn();
+        return;
+    }
+
     uint32_t next = nextAllowedHourStart(rtc_now);
     uint32_t remaining_sec = next - rtc_now;
     if (remaining_sec == 0) {
