@@ -133,7 +133,7 @@ int captureAndSaveBeaconRecords() {
         return a.rssi > b.rssi;
     });
 
-    int record_count = (g_sampled_count > 4) ? 4 : g_sampled_count;
+    int record_count = min(g_sampled_count, MAX_BEACON_TIME_RECORD);
 
     for (int i = 0; i < record_count; i++) {
         memcpy(g_appSettings.beacon_records[i].bssid, g_sampled_beacons[i].bssid, 6);

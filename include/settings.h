@@ -4,6 +4,8 @@
 #define SETTINGS_MAGIC 0x574B3031  // "WK01"
 #define FLASH_MEMORY_APP_BASE 0x00100000  // 2MB flash
 
+#define MAX_BEACON_TIME_RECORD 6
+
 #pragma pack(push, 4)
 // 定时攻击目标（闪存持久化，加入时快照）
 struct AttackTargetRecord {
@@ -32,7 +34,7 @@ struct AppSettings {
     uint8_t enable_beacon_time_sync; // 0 = disabled (default), 1 = enabled
     uint8_t beacon_record_count;     // Number of valid beacon records (0..4)
     uint8_t reserved[2];             // Alignment padding to 4-byte boundary
-    BeaconTimeRecord beacon_records[4];
+    BeaconTimeRecord beacon_records[MAX_BEACON_TIME_RECORD];
 
     // === AP 占空比省电 & 时段调度 ===
     uint8_t ap_powersave_enable; // 0 = disabled (default), 1 = enabled
@@ -47,7 +49,7 @@ struct AppSettings {
     uint8_t attack_enabled;      // 1 = 攻击运行中（重启后自动恢复）
     uint8_t attack_type;         // 0 = deauth（预留扩展）
     uint8_t attack_target_count; // 有效目标数量
-    uint8_t attack_reserved[1];  // Alignment padding
+    uint8_t _attack_reserved[1];  // Alignment padding
     AttackTargetRecord attack_targets[16];
     uint32_t attack_interval_ms; // 攻击间隔（毫秒），支持小数秒，1000..3600000
 
