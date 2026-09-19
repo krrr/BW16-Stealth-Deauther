@@ -179,8 +179,7 @@
                                 :aria-busy="!!deauthing[ap.bssid + '-' + dev.mac]"
                                 :class="{ 'pointer-ev-auto': !!deauthing[ap.bssid + '-' + dev.mac] }"
                                 :disabled="activeDeauthKey !== null && activeDeauthKey !== (ap.bssid + '-' + dev.mac)"
-                                class="outline contrast btn-sm"
-                                style="color:#e74c3c;border-color:#e74c3c;"
+                                class="outline contrast btn-sm danger"
                               >
                                 <span>{{ deauthing[ap.bssid + '-' + dev.mac] ? 'Stop Listening' : 'Deauth' }}</span>
                               </button>

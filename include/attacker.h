@@ -27,5 +27,7 @@ void attackerTick();
 // 距离下次攻击开火的毫秒数（未启用时返回 UINT32_MAX），供 ap_powersave 睡眠分块对齐
 uint32_t attackerMsUntilNextFire();
 
+bool attackerIsRunning();
+
 void handleAttackStatusApi(HttpClient& client);
 void handleAttackPlanApi(HttpClient& client);

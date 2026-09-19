@@ -13,6 +13,7 @@
 #include "settings.h"
 #include "beacon_sync.h"
 #include "ap_powersave.h"
+#include "attacker.h"
 #include "battery.h"
 #include <PowerSave.h>
 
@@ -101,6 +102,7 @@ void handleStatusApi(HttpClient& client) {
     doc["ap_channel"] = ap_channel;
     doc["free_heap"] = xPortGetFreeHeapSize();
     doc["ap_saver_state"] = apPowerSaveStateName();
+    doc["attack_running"] = attackerIsRunning();
 
     BatteryStatus bat = getCachedBatteryStatus();
     JsonObject batObj = doc["battery"].to<JsonObject>();

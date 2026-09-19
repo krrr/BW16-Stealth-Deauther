@@ -16,7 +16,7 @@
         </label>
         <label>
           Attack Interval (s)
-          <input type="number" min="1" max="3600" step="0.1" v-model.number="config.intervalSec" :disabled="saving" />
+          <input type="number" min="0" max="3600" step="0.1" v-model.number="config.intervalSec" :disabled="saving" />
         </label>
         <label>
           Power Save (AP)

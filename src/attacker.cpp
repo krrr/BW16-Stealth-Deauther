@@ -175,6 +175,10 @@ uint32_t attackerMsUntilNextFire() {
     return remain;
 }
 
+bool attackerIsRunning() {
+    return g_attack_running;
+}
+
 void handleAttackStatusApi(HttpClient& client) {
     JsonDocument doc;
     doc["success"] = true;

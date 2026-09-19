@@ -31,6 +31,17 @@
           </div>
         </div>
         <p>
+          Power Save: 
+          <span :style="{ color: status.ap_saver_state && status.ap_saver_state !== 'DISABLED' ? 'var(--pico-ins-color)' : 'var(--pico-muted-color)' }">
+            {{ powerSaveState }}
+          </span>
+        </p>
+        <p>
+          Attack: 
+          <span v-if="status.attack_running" style="color: var(--pico-del-color, #c0392b); font-weight: 600;">Running</span>
+          <span v-else style="color: var(--pico-muted-color);">Idle</span>
+        </p>
+        <p>
           Battery: 
           <span v-if="status.battery?.connected">
             {{ status.battery.voltage.toFixed(2) }}V ({{ status.battery.percent }}% · {{ status.battery.level }}/4)
@@ -39,8 +50,8 @@
             N/A
           </span>
         </p>
-        <p v-if="formattedUptime">Uptime: {{ formattedUptime }}</p>
         <p v-if="freeHeap">Free Heap: {{ freeHeap }} KB</p>
+        <p v-if="formattedUptime">Uptime: {{ formattedUptime }}</p>
         <p>
           RTC Time: <span>{{ rtcTime ? rtcTime.toLocaleString('sv-SE') : 'Not Set' }}</span>
           <span v-if="timeDiff !== null && timeDiff > 30" style="color:var(--del-color,#c0392b);font-size:0.9em;">
@@ -75,6 +86,19 @@ const freeHeap = computed(() => {
     return (status.value.free_heap / 1024).toFixed(1)
   }
   return ''
+})
+
+const powerSaveState = computed(() => {
+  switch (status.value.ap_saver_state) {
+    case 'AP_ON':
+    case 'DUTY_SLEEP':
+    case 'SCHEDULE_OFF':
+      return 'Enabled'
+    case 'DISABLED':
+      return 'Disabled'
+    default:
+      return 'Unknown state'
+  }
 })
 
 const updateRtc = () => {

@@ -15,6 +15,7 @@ export interface DeviceStatus {
   rtc_time?: number
   free_heap?: number
   ap_saver_state?: string
+  attack_running?: boolean
   battery?: BatteryInfo
 }
 

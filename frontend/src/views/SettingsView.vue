@@ -12,76 +12,63 @@
           Configure SoftAP / power etc. Saved to flash.
         </p>
 
-        <form @submit.prevent="saveWifiSettings">
-          <label style="margin-bottom: 0.75rem">
-            <span style="font-weight: 600; font-size: 0.9rem">SSID Name</span>
+        <label style="margin-bottom: 0.75rem">
+          <span style="font-weight: 600; font-size: 0.9rem">SSID Name</span>
+          <input
+            type="text"
+            v-model="apSsid"
+            maxlength="32"
+            required
+            placeholder="e.g. BW16-SD"
+            :disabled="savingSettings"
+            style="margin-bottom: 0;"
+          />
+        </label>
+
+        <label style="margin-bottom: 0.75rem">
+          <span style="font-weight: 600; font-size: 0.9rem">Password</span>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem">
             <input
-              type="text"
-              v-model="apSsid"
+              v-model="apPass"
+              minlength="8"
               maxlength="32"
-              required
-              placeholder="e.g. BW16-SD"
+              placeholder="8 - 32 characters"
               :disabled="savingSettings"
-              style="margin-bottom: 0;"
+              style="margin-bottom: 0; flex: 1"
             />
-          </label>
-
-          <label style="margin-bottom: 0.75rem">
-            <span style="font-weight: 600; font-size: 0.9rem">Password</span>
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem">
-              <input
-                v-model="apPass"
-                minlength="8"
-                maxlength="32"
-                placeholder="8 - 32 characters"
-                :disabled="savingSettings"
-                style="margin-bottom: 0; flex: 1"
-              />
-            </div>
-          </label>
-
-          <label style="margin-bottom: 0.75rem">
-            <span style="font-weight: 600; font-size: 0.9rem">Custom MAC Address</span>
-            <input
-              type="text"
-              v-model="apMac"
-              maxlength="17"
-              placeholder="e.g. 02:12:34:56:78:9A (Leave empty for default)"
-              :disabled="savingSettings"
-              style="margin-bottom: 0; font-family: monospace;"
-            />
-          </label>
-
-          <small style="font-size: 0.85rem; color: var(--pico-muted-color);">
-            * SoftAP changes require a device reboot to take effect.
-          </small>
-
-          <label style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-top: 1rem">
-            <input
-              type="checkbox"
-              v-model="enableBeaconTimeSync"
-              :disabled="savingSettings"
-              style="margin-bottom: 0;"
-              role="switch"
-            />
-            <span style="font-weight: 600; font-size: 0.9rem">Beacon Time Auto-Restore</span>
-          </label>
-          <small style="display: block; font-size: 0.85rem; color: var(--pico-muted-color); margin-top: -0.5rem; margin-bottom: 0.75rem;">
-            When enabled, syncing time button samples surrounding Wi-Fi Beacon timestamps to Flash. On boot, RTC time is automatically restored from nearby Beacons.
-            <span v-if="enableBeaconTimeSync && beaconRecordCount > 0" style="color: var(--pico-ins-color, #27ae60);"> ({{ beaconRecordCount }} AP records saved)</span>
-          </small>
-
-          <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap;">
-            <button
-              type="submit"
-              :disabled="savingSettings"
-              :aria-busy="savingSettings"
-              style="width: auto; margin-bottom: 0"
-            >
-              {{ savingSettings ? 'Saving...' : 'Save Settings' }}
-            </button>
           </div>
-        </form>
+        </label>
+
+        <label style="margin-bottom: 0.75rem">
+          <span style="font-weight: 600; font-size: 0.9rem">Custom MAC Address</span>
+          <input
+            type="text"
+            v-model="apMac"
+            maxlength="17"
+            placeholder="e.g. 02:12:34:56:78:9A (Leave empty for default)"
+            :disabled="savingSettings"
+            style="margin-bottom: 0; font-family: monospace;"
+          />
+        </label>
+
+        <small style="font-size: 0.85rem; color: var(--pico-muted-color);">
+          * SoftAP changes require a device reboot to take effect.
+        </small>
+
+        <label style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-top: 1rem">
+          <input
+            type="checkbox"
+            v-model="enableBeaconTimeSync"
+            :disabled="savingSettings"
+            style="margin-bottom: 0;"
+            role="switch"
+          />
+          <span style="font-weight: 600; font-size: 0.9rem">Beacon Time Auto-Restore</span>
+        </label>
+        <small style="display: block; font-size: 0.85rem; color: var(--pico-muted-color); margin-top: -0.5rem; margin-bottom: 0.75rem;">
+          When enabled, syncing time button samples surrounding Wi-Fi Beacon timestamps to Flash. On boot, RTC time is automatically restored from nearby Beacons.
+          <span v-if="enableBeaconTimeSync && beaconRecordCount > 0" style="color: var(--pico-ins-color, #27ae60);"> ({{ beaconRecordCount }} AP records saved)</span>
+        </small>
       </div>
 
       <hr style="margin: 1.5rem 0" />
@@ -184,6 +171,12 @@
         </small>
       </div>
 
+      <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 2rem; flex-wrap: wrap;">
+        <button @click="saveSettings" :disabled="savingSettings" :aria-busy="savingSettings" style="width: auto; margin-bottom: 0">
+          {{ savingSettings ? 'Saving...' : 'Save Settings' }}
+        </button>
+      </div>
+
       <hr style="margin: 1.5rem 0" />
 
       <div>
@@ -218,8 +211,8 @@
           <button @click="rebootDevice" :disabled="rebooting || deepSleeping" :aria-busy="rebooting" class="outline secondary" style="width: auto; margin-bottom: 0">
             {{ rebooting ? 'Rebooting...' : 'Reboot Device' }}
           </button>
-          <button @click="deepSleepDevice" :disabled="rebooting || deepSleeping" :aria-busy="deepSleeping" class="outline contrast" style="width: auto; margin-bottom: 0">
-            {{ deepSleeping ? 'Entering Deep Sleep...' : 'Deep Sleep (Debug)' }}
+          <button @click="deepSleepDevice" :disabled="rebooting || deepSleeping" :aria-busy="deepSleeping" class="outline contrast danger" style="width: auto; margin-bottom: 0">
+            {{ deepSleeping ? 'Entering Deep Sleep...' : 'Deep Sleep (Forever)' }}
           </button>
         </div>
       </div>
@@ -254,14 +247,6 @@ const savingSettings = ref(false)
 
 // 本地相对 UTC 的偏移（分钟），东正西负；getTimezoneOffset() 是 UTC-本地，取反
 const tzOffsetMinutes = -new Date().getTimezoneOffset()
-const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'local'
-const tzLabel = computed(() => {
-  const sign = tzOffsetMinutes >= 0 ? '+' : '-'
-  const abs = Math.abs(tzOffsetMinutes)
-  const h = Math.floor(abs / 60)
-  const m = abs % 60
-  return `${tzName} (UTC${sign}${h}${m ? ':' + String(m).padStart(2, '0') : ''})`
-})
 
 // 小时粒度掩码换算，时区偏移按四舍五入取整小时（非整点偏移时区有 ±30min 边界误差）
 const utcMaskToLocal = (mask: number): number => {
@@ -359,7 +344,7 @@ onMounted(() => {
   fetchSettings()
 })
 
-const saveWifiSettings = async () => {
+const saveSettings = async () => {
   if (apPowersaveEnable.value && dutyOnSec.value >= dutyPeriodSec.value) {
     message.error('AP on time must be shorter than the cycle period')
     return
