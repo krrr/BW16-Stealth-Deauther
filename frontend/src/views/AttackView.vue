@@ -16,7 +16,7 @@
         </label>
         <label>
           Attack Interval (s)
-          <input type="number" min="0" max="3600" step="0.1" v-model.number="config.intervalSec" :disabled="saving" />
+          <input type="number" min="0.1" max="3600" step="0.1" v-model.number="config.intervalSec" :disabled="saving" />
         </label>
         <label>
           Power Save (AP)
@@ -182,7 +182,7 @@ const removeFromPlan = (t: AttackTarget) => {
 const startAttack = async () => {
   persistConfig()
   // Defensively clamp the interval range
-  config.value.intervalSec = Math.min(3600, Math.max(1, Number(config.value.intervalSec) || 5))
+  config.value.intervalSec = Math.min(3600, Math.max(0.1, Number(config.value.intervalSec) || 5))
   plan.value.config = { ...config.value }
   savePlan(plan.value)
   saving.value = true

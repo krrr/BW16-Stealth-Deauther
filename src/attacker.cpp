@@ -246,8 +246,8 @@ void handleAttackPlanApi(HttpClient& client) {
     }
 
     double interval_sec = req["interval_sec"] | 5.0;
-    if (interval_sec < 1.0 || interval_sec > 3600.0) {
-        client.sendJsonFail("interval_sec must be between 1 and 3600");
+    if (interval_sec < 0.1 || interval_sec > 3600.0) {
+        client.sendJsonFail("interval_sec must be between 0.1 and 3600");
         return;
     }
     uint32_t interval_ms = (uint32_t)(interval_sec * 1000.0 + 0.5);
