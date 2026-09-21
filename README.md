@@ -7,7 +7,7 @@ A WiFi killer built using the Ai-Thinker BW16 development board, with pure remot
 - Basic deauth attack support, for both 2.4GHz and 5GHz frequency bands.
 - Scanning and attacks can both be completed via the web interface without interrupting the connection.
 - Using a specially designed PCB that supports battery level display and automatic deep-sleep on low power.
-- Specially designed for battery power, supports intermittent attacks with sleep modes, and features ultra-low power consumption.
+- Specially designed for battery power, supports intermittent attacks with sleep modes (lower), and features ultra-low power consumption. *The longer the interval, the lower the packet loss rate. To completely disconnect the device, it cannot enter sleep mode*
 - Supports OTA firmware upgrades
 
 ## License
