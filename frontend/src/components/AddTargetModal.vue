@@ -3,7 +3,7 @@
     <article class="add-target-modal-article">
       <header>
         <p style="margin: 0; font-weight: bold; font-size: 1.1rem;">
-          Add Target Manually
+          {{ isEdit ? 'Edit Target' : 'Add Target Manually' }}
         </p>
         <div class="flex1"></div>
         <button aria-label="Close" rel="prev" @click="closeModal"></button>
@@ -68,7 +68,7 @@
             Cancel
           </button>
           <button type="submit" class="contrast">
-            Add
+            {{ isEdit ? 'Save' : 'Add' }}
           </button>
         </footer>
       </form>
@@ -77,22 +77,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { AttackTarget } from '../utils/attackPlan'
 
 const props = withDefaults(defineProps<{
   open: boolean
+  target?: AttackTarget | null
   defaultChannel?: number | null
   existingTargets?: AttackTarget[]
 }>(), {
+  target: null,
   defaultChannel: 1,
   existingTargets: () => [],
 })
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'add', target: AttackTarget): void
+  (e: 'save', target: AttackTarget): void
 }>()
+
+const isEdit = computed(() => !!props.target)
 
 const form = reactive({
   bssid: '',
@@ -112,9 +116,28 @@ const resetForm = () => {
   errorMsg.value = ''
 }
 
+const initForm = () => {
+  if (props.target) {
+    form.bssid = props.target.bssid
+    form.mac = props.target.mac
+    form.ssid = props.target.ssid || ''
+    form.channel = props.target.channel
+    form.rssi = props.target.rssi ?? null
+    errorMsg.value = ''
+  } else {
+    resetForm()
+  }
+}
+
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
-    resetForm()
+    initForm()
+  }
+})
+
+watch(() => props.target, () => {
+  if (props.open) {
+    initForm()
   }
 })
 
@@ -165,26 +188,49 @@ const submitForm = () => {
     return
   }
 
-  if (props.existingTargets.length >= 16) {
+  if (!isEdit.value && props.existingTargets.length >= 16) {
     errorMsg.value = 'Target limit reached (maximum 16 targets)'
     return
   }
 
-  if (props.existingTargets.some(t => t.mac.toUpperCase() === normMac && t.bssid.toUpperCase() === normBssid)) {
+  const isDuplicate = isEdit.value
+    ? props.existingTargets.some(t =>
+        !(t.mac.toUpperCase() === props.target!.mac.toUpperCase() && t.bssid.toUpperCase() === props.target!.bssid.toUpperCase()) &&
+        t.mac.toUpperCase() === normMac &&
+        t.bssid.toUpperCase() === normBssid
+      )
+    : props.existingTargets.some(t =>
+        t.mac.toUpperCase() === normMac &&
+        t.bssid.toUpperCase() === normBssid
+      )
+
+  if (isDuplicate) {
     errorMsg.value = 'Target already exists in attack plan'
     return
   }
 
-  const target: AttackTarget = {
-    mac: normMac,
-    bssid: normBssid,
-    ssid: form.ssid.trim() || '(Manual)',
-    channel: ch,
-    rssi: form.rssi !== null && !isNaN(Number(form.rssi)) ? Number(form.rssi) : null,
-    addedAt: new Date().toLocaleString('sv-SE'),
-  }
+  const ssid = form.ssid.trim() || '(Manual)'
+  const rssi = form.rssi !== null && !isNaN(Number(form.rssi)) ? Number(form.rssi) : null
+  const finalTarget: AttackTarget = isEdit.value && props.target
+    ? {
+        ...props.target,
+        mac: normMac,
+        bssid: normBssid,
+        ssid,
+        channel: ch,
+        rssi
+      }
+    : {
+        mac: normMac,
+        bssid: normBssid,
+        ssid,
+        channel: ch,
+        rssi,
+        addedAt: new Date().toLocaleString('sv-SE'),
+        lastSeen: '',
+      }
 
-  emit('add', target)
+  emit('save', finalTarget)
   closeModal()
 }
 

@@ -36,7 +36,7 @@
         <button v-if="running" @click="stopAttack" :disabled="saving" :aria-busy="saving" class="outline secondary">
           Stop
         </button>
-        <button @click="openManualModal" :disabled="saving" class="outline secondary">
+        <button @click="openEditModal(null)" :disabled="saving" class="outline secondary">
           Add Target
         </button>
         <span v-if="running" style="color:#e74c3c;font-weight:bold;">
@@ -84,6 +84,9 @@
               </td>
               <td style="font-size:0.85em;">{{ t.addedAt || '—' }}</td>
               <td class="btn-col">
+                <button @click="openEditModal(t)" :disabled="saving" class="outline btn-sm">
+                  Edit
+                </button>
                 <button @click="removeFromPlan(t)" :disabled="saving" class="outline btn-sm" style="color:#e74c3c;border-color:#e74c3c;">
                   Remove
                 </button>
@@ -105,11 +108,12 @@
 
     <!-- Manual Target Modal -->
     <AddTargetModal
-      :open="manualModalOpen"
+      :open="editModalOpen"
+      :target="editingTarget"
       :default-channel="apChannel"
       :existing-targets="plan.targets"
-      @close="manualModalOpen = false"
-      @add="handleAddManualTarget"
+      @close="closeManualModal"
+      @save="handleSaveTarget"
     />
   </section>
 </template>
@@ -119,7 +123,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from '../utils/message'
 import AddTargetModal from '../components/AddTargetModal.vue'
 import {
-  loadPlan, savePlan, removeTarget, addTarget, hasPlan, defaultPlan,
+  loadPlan, savePlan, removeTarget, addTarget, updateTarget, hasPlan, defaultPlan,
   type AttackPlan, type AttackTarget, type AttackConfig,
 } from '../utils/attackPlan'
 
@@ -148,16 +152,31 @@ const apPowerSaveEnabled = ref(false)
 const apChannel = ref<number | null>(null)
 let pollTimer: number | null = null
 
-const manualModalOpen = ref(false)
+const editModalOpen = ref(false)
+const editingTarget = ref<AttackTarget | null>(null)
 
-const openManualModal = () => {
-  manualModalOpen.value = true
+const openEditModal = (target: AttackTarget | null) => {
+  editingTarget.value = target ? { ...target } : null
+  editModalOpen.value = true
 }
 
-const handleAddManualTarget = (target: AttackTarget) => {
-  plan.value = addTarget(target)
+const closeManualModal = () => {
+  editModalOpen.value = false
+  editingTarget.value = null
+}
+
+const handleSaveTarget = (target: AttackTarget) => {
+  if (editingTarget.value) {
+    plan.value = updateTarget(
+      { mac: editingTarget.value.mac, bssid: editingTarget.value.bssid },
+      target
+    )
+    message.success(`Target updated: ${target.mac}`)
+  } else {
+    plan.value = addTarget(target)
+    message.success(`Target added: ${target.mac}`)
+  }
   config.value = { ...plan.value.config }
-  message.success(`Target added: ${target.mac}`)
 }
 
 const canStart = computed(() => plan.value.targets.length > 0 && !saving.value)
@@ -314,6 +333,9 @@ onUnmounted(() => {
 <style scoped lang="scss">
   .btn-col {
     white-space: nowrap;
+    button:not(:last-child) {
+      margin-right: 0.35rem;
+    }
   }
   .action-btn-div {
     display:flex;

@@ -82,6 +82,21 @@ export const removeTarget = (mac: string, bssid: string): AttackPlan => {
   return plan
 }
 
+export const updateTarget = (oldKey: { mac: string, bssid: string }, updated: AttackTarget): AttackPlan => {
+  const plan = loadPlan()
+  const idx = plan.targets.findIndex(
+    x => x.mac.toUpperCase() === oldKey.mac.toUpperCase() && x.bssid.toUpperCase() === oldKey.bssid.toUpperCase()
+  )
+  if (idx !== -1) {
+    plan.targets[idx] = {
+      ...plan.targets[idx],
+      ...updated,
+    }
+    savePlan(plan)
+  }
+  return plan
+}
+
 export const hasTarget = (mac: string, bssid: string): boolean => {
   return loadPlan().targets.some(x => x.mac === mac && x.bssid === bssid)
 }
