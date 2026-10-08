@@ -121,13 +121,38 @@ static void runAttackRound() {
     g_next_fire_ms = millis() + g_appSettings.attack_interval_ms;
 }
 
-static void onBootGracePeriodExpired(TimerHandle_t xTimer) {
-    (void)xTimer;
+// 检查目标是否全部处于同一信道，若是则返回该信道号，否则返回 0
+static uint8_t getSingleTargetChannel() {
+    if (g_appSettings.attack_target_count == 0) return 0;
+    uint8_t ch = g_appSettings.attack_targets[0].channel;
+    for (int i = 1; i < g_appSettings.attack_target_count; i++) {
+        if (g_appSettings.attack_targets[i].channel != ch) {
+            return 0;
+        }
+    }
+    return ch;
+}
+
+static void startAttackEngine() {
+    // 第一次开始时，若所有目标在同一信道，直接将 SoftAP 切换到该信道，避免每轮攻击来回切信道
+    uint8_t single_ch = getSingleTargetChannel();
+    if (single_ch != 0) {
+        Serial.print("[ATTACK] All targets on channel ");
+        Serial.print(single_ch);
+        Serial.println(", switching SoftAP channel upfront");
+        switchChannel(single_ch);
+    }
+
     g_attack_running = true;
     g_start_channel = ap_channel;
-    g_next_fire_ms = millis();  // 保护期结束，第一轮立即开火
     g_attack_rounds = 0;
     g_attack_packets = 0;
+    g_next_fire_ms = millis();  // 首轮立即执行
+}
+
+static void onBootGracePeriodExpired(TimerHandle_t xTimer) {
+    (void)xTimer;
+    startAttackEngine();
     Serial.println("[ATTACK] Boot grace period expired -> attack auto-resumed!");
 }
 
@@ -316,11 +341,7 @@ void handleAttackPlanApi(HttpClient& client) {
 
     // 同步引擎
     if (enable) {
-        g_attack_running = true;
-        g_start_channel = ap_channel;
-        g_attack_rounds = 0;
-        g_attack_packets = 0;
-        g_next_fire_ms = millis();  // 首轮立即执行
+        startAttackEngine();
         Serial.print("[ATTACK] plan started, targets=");
         Serial.print(count);
         Serial.print(" interval=");
