@@ -44,7 +44,7 @@ static const uint32_t SLEEP_CHUNK_MS = 2000;
 static const uint32_t SCHEDULE_OFF_SLEEP_CHUNK_S = 10;
 
 // 开机后强制保持 AP 开启的时长（秒）：即使当前时间不在允许调度内，也不在此时间段内关闭 AP
-#define BOOT_AP_HOLD_SEC 30
+#define BOOT_AP_HOLD_SEC 60
 
 // 判断 RTC 时间是否有效（2020-09-13 之后才认为是设置过的时间）
 static bool rtcTimeValid() {
