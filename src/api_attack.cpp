@@ -126,7 +126,7 @@ void handleTestDeauthApi(HttpClient& client) {
         }
         wext_set_channel(WLAN0_NAME, channel);  // 必须，上面的调用不够
         ap_channel = channel;
-        delay(100);
+        delay(SWITCH_CH_DELAY_MS);
     }
 
     memcpy(g_deauth_target_bssid, bssid, 6);

@@ -519,7 +519,7 @@ void handleDeviceScanApi(HttpClient& client) {
         }
         wext_set_channel(WLAN0_NAME, target_channel);  // 必须，上面的调用不够
         ap_channel = target_channel;
-        delay(100);
+        delay(SWITCH_CH_DELAY_MS);
     }
 
     // 启用混杂模式

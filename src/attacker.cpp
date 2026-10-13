@@ -24,7 +24,7 @@ extern "C" {
 #define ATTACK_BOOT_HOLD_SEC 30  // 开机延迟 30 秒执行攻击（出bug时不至于拖 SoftAP 下水）
 #define ATTACK_ROUND_PACKETS 4      // 每个目标每轮发包数（与 test-deauth 一致）
 // === 目标 AP 信道跟踪配置 ===
-#define CH_TRACK_INTERVAL_SEC     60   // 两次核查最小时间间隔(s)
+#define CH_TRACK_INTERVAL_SEC     600   // 两次核查最小时间间隔(s)
 #define CH_TRACK_LISTEN_MS        500   // 核查阶段：在当前信道监听 Beacon 的驻留时间（ms）
 #define CH_TRACK_SCAN_DWELL_MS    250   // 搜寻阶段：每个候选信道的驻留时间（ms）
 
@@ -71,7 +71,7 @@ static bool switchChannel(int ch) {
     }
     wext_set_channel(WLAN0_NAME, ch);  // 必须，上面的调用不够
     ap_channel = ch;
-    delay(100);
+    delay(SWITCH_CH_DELAY_MS);
     return true;
 }
 

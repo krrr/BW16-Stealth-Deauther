@@ -1,6 +1,9 @@
 #pragma once
 #include <Arduino.h>
 
+// wext_set_channel纯写寄存器后立即返回，以防万一等待RF锁相环稳定。
+#define SWITCH_CH_DELAY_MS 2
+
 bool parseMac(const String& str, uint8_t* mac);
 bool isMacValidUnicast(const uint8_t* mac);
 String formatMac(const uint8_t* mac);
