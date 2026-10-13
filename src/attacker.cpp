@@ -34,7 +34,7 @@ static uint32_t g_next_fire_ms = 0;
 static uint8_t g_start_channel = 1;  // 攻击启动时信道，停止时恢复
 static uint32_t g_attack_rounds = 0;
 static uint32_t g_attack_packets = 0;
-static TimerHandle_t s_bootDelayTimer = NULL;
+static bool s_boot_resume_pending = false;
 
 // === 信道跟踪状态 ===
 static uint32_t g_last_track_ms = 0;            // 上次核查时间戳（millis）
@@ -172,38 +172,32 @@ static void startAttackEngine() {
     g_last_track_ms = g_next_fire_ms;  // 从启动时刻开始计时
 }
 
-static void onBootGracePeriodExpired(TimerHandle_t xTimer) {
-    (void)xTimer;
-    startAttackEngine();
-    Serial.println("[ATTACK] Boot grace period expired -> attack auto-resumed!");
-}
-
 void attackerInit() {
     g_attack_running = false;
+    s_boot_resume_pending = false;
 
     // 重启后如果攻击计划处于开启状态，推迟 30 秒执行（给 SoftAP 连接预留安全窗口）
+    // 已踩坑：不要使用 FreeRTOS 软件定时器回调执行 startAttackEngine，
+    // 因为信道切换内部的 wifi_ap_switch_chl_and_inform 会调用 rtw_down_sema 等待自身定时器，
+    // 在 Timer Task 上下文中执行会导致自死锁（Self-Deadlock）。
     if (g_appSettings.attack_enabled == 1 && g_appSettings.attack_target_count > 0) {
-        if (s_bootDelayTimer == NULL) {
-            s_bootDelayTimer = xTimerCreate(
-                "AtkBootTimer",
-                pdMS_TO_TICKS(ATTACK_BOOT_HOLD_SEC * 1000),
-                pdFALSE,
-                (void*)0,
-                onBootGracePeriodExpired
-            );
-        }
-        if (s_bootDelayTimer != NULL) {
-            xTimerStart(s_bootDelayTimer, 0);
-            Serial.print("[ATTACK] attack auto-resume postponed by ");
-            Serial.print(ATTACK_BOOT_HOLD_SEC);
-            Serial.println("s (grace period for AP connection)");
-        } else {
-            Serial.println("[ATTACK] Failed to create boot delay timer!");
-        }
+        s_boot_resume_pending = true;
+        Serial.print("[ATTACK] attack auto-resume postponed by ");
+        Serial.print(ATTACK_BOOT_HOLD_SEC);
+        Serial.println("s (grace period for AP connection)");
     }
 }
 
 void attackerTick() {
+    if (s_boot_resume_pending) {  // 开机保护期倒计时
+        if (millis() >= (uint32_t)ATTACK_BOOT_HOLD_SEC * 1000) {
+            s_boot_resume_pending = false;
+            startAttackEngine();
+            Serial.println("[ATTACK] Boot grace period expired -> attack auto-resumed!");
+        }
+        return;
+    }
+
     if (!g_attack_running || g_appSettings.attack_target_count == 0) return;
 
     uint32_t now = millis();
@@ -217,6 +211,11 @@ void attackerTick() {
 
 // 距离下次开火毫秒数；未启用/无目标返回 UINT32_MAX；已到点返回 0
 uint32_t attackerMsUntilNextFire() {
+    if (s_boot_resume_pending) {
+        uint32_t hold_ms = (uint32_t)ATTACK_BOOT_HOLD_SEC * 1000;
+        uint32_t now = millis();
+        return (now >= hold_ms) ? 0 : (hold_ms - now);
+    }
     if (!g_attack_running || g_appSettings.attack_target_count == 0) return UINT32_MAX;
     uint32_t remain = g_next_fire_ms - millis();
     if (remain > 0x80000000UL) return 0;  // 时间已到（含溢出保护）
@@ -354,12 +353,10 @@ void handleAttackPlanApi(HttpClient& client) {
         return;
     }
 
-    // 取消可能正在等待的开机保护定时器
-    if (s_bootDelayTimer != NULL) {
-        if (xTimerIsTimerActive(s_bootDelayTimer) != pdFALSE) {
-            xTimerStop(s_bootDelayTimer, 0);
-            Serial.println("[ATTACK] Boot delay timer canceled by API");
-        }
+    // 取消可能正在等待的开机保护
+    if (s_boot_resume_pending) {
+        s_boot_resume_pending = false;
+        Serial.println("[ATTACK] Boot delay timer canceled by API");
     }
 
     // 同步引擎
