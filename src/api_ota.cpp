@@ -3,6 +3,7 @@
 #include "http/HttpClient.h"
 #include "OTA.h"
 #include "wdt_api.h"
+#include "attacker.h"
 
 typedef uint32_t in_addr_t;
 
@@ -19,6 +20,8 @@ void handleOtaApi(HttpClient& client) {
         client.sendJsonFail("Invalid socket descriptor");
         return;
     }
+
+    AttackerSuspendGuard attackerGuard; // OTA期间挂起后台攻击任务，保证网络和Flash写入稳定
 
     // Set socket to blocking mode for low-level SDK OTA operations
     int flags = lwip_fcntl(sock_fd, F_GETFL, 0);

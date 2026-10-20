@@ -9,6 +9,7 @@
 #include "wifi_drv.h"
 #include "utils.h"
 #include "wdt_api.h"
+#include "attacker.h"
 
 
 #define SCAN_TIMEOUT_MS 15000  // 一般10秒内就好了
@@ -104,6 +105,8 @@ void handleApScanApi(HttpClient& client) {
         client.sendJsonFail("out of memory");
         return;
     }
+
+    AttackerSuspendGuard attackerGuard; // 扫描期间挂起后台攻击引擎，避免争抢射频与死锁
 
     g_scan_count = 0;
     g_scan_state = SCAN_RUNNING;
@@ -481,8 +484,10 @@ void handleDeviceScanApi(HttpClient& client) {
         client.sendJsonFail("invalid bssid");
         return;
     }
-    int target_channel = chStr.toInt();
 
+    AttackerSuspendGuard attackerGuard; // 设备扫描期间挂起后台攻击任务
+
+    int target_channel = chStr.toInt();
     uint32_t scan_timeout_ms = DEVICE_SCAN_TIMEOUT_MS;
 
     if (durationStr.length() > 0) {

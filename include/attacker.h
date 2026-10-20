@@ -29,5 +29,20 @@ uint32_t attackerMsUntilNextFire();
 
 bool attackerIsRunning();
 
+// 挂起 / 恢复攻击引擎（支持嵌套计数）
+// 用于在扫描 AP、扫描设备、OTA 升级或单次测试发包期间临时挂起后台攻击任务
+void attackerSuspend();
+void attackerResume();
+bool attackerIsSuspended();
+
+// RAII 保护守卫：在作用域内自动挂起，退出作用域（包括提前 return）自动恢复
+class AttackerSuspendGuard {
+public:
+    AttackerSuspendGuard() { attackerSuspend(); }
+    ~AttackerSuspendGuard() { attackerResume(); }
+    AttackerSuspendGuard(const AttackerSuspendGuard&) = delete;
+    AttackerSuspendGuard& operator=(const AttackerSuspendGuard&) = delete;
+};
+
 void handleAttackStatusApi(HttpClient& client);
 void handleAttackPlanApi(HttpClient& client);
